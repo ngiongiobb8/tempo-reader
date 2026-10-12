@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tempo Reader</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tempo">
+<meta name="theme-color" content="#000000">
+<script src="jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1e222b;
+    --text: #e8e9ed;
+    --muted: #8a8f9c;
+    --accent: #ff5555;
+    --border: #2a2e38;
+    --radius: 14px;
+  }
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f5f7; --panel: #ffffff; --panel2: #eef0f3; --text: #1b1d22; --muted: #6b7280; --border: #e2e4e9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --text: #e8e9ed; --muted: #8a8f9c; --border: #2a2e38;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%; margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  body {
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  .topbar {
+    flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:active { transform: scale(0.94); }
+  .top-title { font-size: 13px; color: var(--muted); text-align: center; flex: 1; padding: 0 8px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top-left, .top-right { display: flex; gap: 8px; }
+
+  .stage-outer {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 0 16px; min-height: 0;
+  }
+  .stage {
+    position: relative;
+    width: 100%; max-width: 640px;
+    height: 40%;
+    min-height: 140px;
+    display: flex; align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .guide { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.7; }
+  .guide-top { top: 28%; }
+  .guide-bottom { top: 72%; }
+  .center-mark {
+    position: absolute; left: 50%; top: 10px; bottom: 10px; width: 1px;
+    background: var(--accent); opacity: 0.2;
+  }
+  .row {
+    position: relative; width: 100%;
+    display: flex; align-items: baseline; justify-content: center;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-weight: 600;
+    padding: 0 10px;
+  }
+  .seg-left { flex: 1 1 0; text-align: right; white-space: pre; overflow: hidden; }
+  .seg-orp { flex: 0 0 auto; text-align: center; white-space: pre; }
+  .seg-orp.hl { color: var(--accent); }
+  .seg-right { flex: 1 1 0; text-align: left; white-space: pre; overflow: hidden; }
+
+  .bottom {
+    flex: none; padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .progress-wrap { height: 4px; background: var(--panel2); border-radius: 999px; overflow: hidden; }
+  .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .08s linear; }
+  .stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin: 6px 2px 12px; font-variant-numeric: tabular-nums; }
+  .transport { display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .transport button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 999px; padding: 12px 16px; font-size: 14px;
+  }
+  .transport .play {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+    font-weight: 700; padding: 14px 28px; font-size: 16px;
+  }
+  .transport button:active { transform: scale(0.96); }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: flex-end; justify-content: center;
+    z-index: 50;
+  }
+  .overlay.show { display: flex; }
+  .sheet {
+    width: 100%; max-width: 640px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-top-left-radius: 20px; border-top-right-radius: 20px;
+    max-height: 82vh; overflow-y: auto;
+    padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  .sheet h2 { font-size: 16px; margin: 0 0 14px; display: flex; justify-content: space-between; align-items: center; }
+  .sheet h2 .close { font-size: 13px; color: var(--muted); font-weight: 400; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; background: var(--panel); }
+
+  .control { margin-bottom: 14px; }
+  .control label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+  .control label span.val { color: var(--text); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; height: 30px; accent-color: var(--accent); touch-action: none; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--border); }
+  .toggle-row:first-of-type { border-top: none; }
+  .switch { position: relative; width: 40px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .pill { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 999px; transition: .15s; }
+  .pill:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  input:checked + .pill { background: var(--accent); }
+  input:checked + .pill:before { transform: translateX(16px); }
+  .theme-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+  .theme-row button { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; }
+  .theme-row button.active { border-color: var(--accent); color: var(--accent); }
+  .color-row { display: flex; gap: 14px; margin-top: 8px; align-items: center; }
+  .color-row label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  input[type="color"] { width: 34px; height: 28px; border: 1px solid var(--border); border-radius: 8px; background: none; padding: 0; }
+
+  .upload-btn { width: 100%; padding: 13px; border-radius: 12px; border: 1.5px dashed var(--border); background: var(--panel); color: var(--text); font-size: 13.5px; margin-bottom: 12px; }
+  .book-row { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-top: 1px solid var(--border); }
+  .book-row:first-of-type { border-top: none; }
+  .book-info { flex: 1; min-width: 0; }
+  .book-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .book-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .book-prog { height: 3px; background: var(--panel2); border-radius: 999px; overflow: hidden; margin-top: 7px; }
+  .book-prog > div { height: 100%; background: var(--accent); }
+  .book-row.current .book-title::before { content: "▶ "; color: var(--accent); font-size: 11px; }
+  .lib-section { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 4px; }
+  .book-actions { display: flex; gap: 6px; }
+  .book-actions button { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 12px; }
+  .book-actions button.danger { color: var(--accent); }
+  .empty-lib { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 10px; }
+  textarea#pasteArea { width: 100%; min-height: 90px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 10px 12px; font-size: 13.5px; font-family: inherit; margin-top: 6px; }
+  .save-paste-btn { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); font-size: 13px; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+
+  #searchInput { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+  .result-row { padding: 10px 4px; border-top: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+  .result-row:first-of-type { border-top: none; }
+  .result-row b { color: var(--accent); }
+  .result-row:active { opacity: 0.6; }
+  .resume-banner {
+    display: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; margin: 0 16px 8px; font-size: 12.5px; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .resume-banner.show { display: flex; }
+  .resume-banner button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 7px 12px; font-size: 12px; }
+
+  .sheet.tall { max-height: 92vh; height: 92vh; display: flex; flex-direction: column; }
+  .sheet.tall .book-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .book-content { font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.75; color: var(--text); padding-bottom: 30px; }
+  .book-content p { margin: 0 0 1em; }
+  .bv-word { cursor: pointer; border-radius: 3px; padding: 1px 0; }
+  .bv-word:active { background: var(--panel2); }
+  .bv-word.current { background: var(--accent); color: #fff; padding: 1px 4px; }
+  .stage { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .topbar, .bottom, .resume-banner { transition: opacity .35s ease; }
+  .stage, .guide, .center-mark { transition: background-color .35s, border-color .35s, opacity .35s; }
+
+  /* Pitch black: no chrome around the word, ever */
+  body.minimal .stage { background: transparent; border-color: transparent; }
+  body.minimal .guide, body.minimal .center-mark { opacity: 0; }
+  /* ...and the controls fade away completely while reading */
+  body.minimal.playing .topbar,
+  body.minimal.playing .bottom,
+  body.minimal.playing .resume-banner { opacity: 0; pointer-events: none; }
+  body.minimal.playing { cursor: none; }
+
+  .bv-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    height: 100%; min-height: 200px; color: var(--muted); font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
+  .spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- full-screen library ---- */
+  .overlay.full { align-items: stretch; background: var(--bg); }
+  .overlay.full .sheet {
+    max-width: none; max-height: none; height: 100%; border: none; border-radius: 0;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 18px calc(28px + env(safe-area-inset-bottom, 0px));
+  }
+  .lib-inner { max-width: 900px; margin: 0 auto; }
+  .lib-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .lib-head h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
+  .lib-head-btns { display: flex; gap: 8px; }
+  .pill-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 999px; padding: 7px 14px; font-size: 13px; }
+  .pill-btn.on { border-color: var(--accent); color: var(--accent); }
+  .lib-add { display: flex; gap: 8px; margin-bottom: 6px; }
+  .lib-add .upload-btn { margin: 0; flex: 1; }
+  .lib-add .pill-btn { border-radius: 12px; }
+  #pasteWrap { display: none; margin-bottom: 8px; }
+  #pasteWrap.show { display: block; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 20px 14px; margin-top: 6px; }
+  .card { cursor: pointer; min-width: 0; -webkit-tap-highlight-color: transparent; }
+  .card:active .cover { transform: scale(0.97); }
+  .cover {
+    position: relative; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden;
+    background: var(--panel2); box-shadow: 0 4px 14px rgba(0,0,0,0.28); transition: transform .12s;
+  }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cover-ph {
+    width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between;
+    padding: 12px 10px; color: #fff; font-family: Georgia, serif;
+  }
+  .cover-ph .t { font-size: 14px; font-weight: 700; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+  .cover-ph .a { font-size: 10.5px; opacity: .8; }
+  .cover .badge {
+    position: absolute; top: 6px; left: 6px; background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 999px;
+  }
+  .cover .del {
+    position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%;
+    border: none; background: rgba(0,0,0,0.7); color: #fff; font-size: 14px; display: none;
+  }
+  .grid.editing .del { display: flex; align-items: center; justify-content: center; }
+  .grid.editing .card { animation: wiggle .25s ease-in-out infinite alternate; }
+  @keyframes wiggle { from { transform: rotate(-0.8deg); } to { transform: rotate(0.8deg); } }
+  .card-title { font-size: 12.5px; font-weight: 600; margin-top: 8px; line-height: 1.25;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .card-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .card .book-prog { margin-top: 6px; }
+
+  .bv-hint { font-size: 11.5px; color: var(--muted); margin: -6px 0 14px; }
+
+  .toast-wrap {
+    position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    z-index: 100; pointer-events: none; padding: 0 14px;
+  }
+  .toast {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 16px; border-radius: 10px; font-size: 12.5px; max-width: 520px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s;
+  }
+  .toast.err { border-color: var(--accent); color: var(--accent); }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <div class="topbar">
+    <div class="top-left">
+      <button class="icon-btn" id="libraryBtn" title="Library">📚</button>
+      <button class="icon-btn" id="searchBtn" title="Search">🔍</button>
+    </div>
+    <div class="top-title" id="bookTitle">No book loaded</div>
+    <div class="top-right">
+      <button class="icon-btn" id="bookViewBtn" title="Book view">📖</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+    </div>
+  </div>
+
+  <div class="resume-banner" id="resumeBanner">
+    <span id="resumeText">Resume where you left off?</span>
+    <button id="resumeBtn">Resume</button>
+  </div>
+
+  <div class="stage-outer">
+    <div class="stage">
+      <div class="guide guide-top"></div>
+      <div class="guide guide-bottom"></div>
+      <div class="center-mark"></div>
+      <div class="row" id="row">
+        <span class="seg-left" id="segLeft"></span><span class="seg-orp" id="segOrp"></span><span class="seg-right" id="segRight"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="stats">
+      <span id="wordCount">0 / 0</span>
+      <span id="wpmBadge">350 wpm</span>
+      <span id="timeLeft">--:--</span>
+    </div>
+    <div class="transport">
+      <button id="backBtn">« 10</button>
+      <button class="play" id="playBtn">▶ Play</button>
+      <button id="fwdBtn">10 »</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="settingsOverlay">
+    <div class="sheet">
+      <h2>Settings <span class="close" data-close="settingsOverlay">Done</span></h2>
+
+      <div class="control">
+        <label>Speed <span class="val" id="wpmVal">350</span> wpm</label>
+        <input type="range" id="wpm" min="100" max="900" step="10" value="350">
+      </div>
+      <div class="control">
+        <label>Words per flash <span class="val" id="chunkVal">1</span></label>
+        <input type="range" id="chunk" min="1" max="4" step="1" value="1">
+      </div>
+      <div class="control">
+        <label>Font size <span class="val" id="fontVal">44</span>px</label>
+        <input type="range" id="fontSize" min="22" max="84" step="2" value="44">
+      </div>
+      <div class="control">
+        <label>Slow down on punctuation <span class="val" id="punctVal">1.6x</span></label>
+        <input type="range" id="punctMult" min="10" max="30" step="1" value="16">
+      </div>
+
+      <div class="toggle-row">
+        <span>Highlight center letter (ORP)</span>
+        <label class="switch"><input type="checkbox" id="orpToggle" checked><span class="pill"></span></label>
+      </div>
+
+      <div class="lib-section" style="margin:18px 0 10px">Pacing</div>
+      <div class="control">
+        <label>Pause at paragraph breaks <span class="val" id="paraVal">2.5x</span></label>
+        <input type="range" id="paraMult" min="10" max="40" step="1" value="25">
+      </div>
+      <div class="toggle-row">
+        <span>Extra time for long words</span>
+        <label class="switch"><input type="checkbox" id="longToggle" checked><span class="pill"></span></label>
+      </div>
+      <div class="control" style="margin-top:12px">
+        <label>Rewind when resuming <span class="val" id="rewindVal">4 words</span></label>
+        <input type="range" id="rewind" min="0" max="10" step="1" value="4">
+      </div>
+      <div class="toggle-row">
+        <span>Ease into speed when resuming</span>
+        <label class="switch"><input type="checkbox" id="rampToggle" checked><span class="pill"></span></label>
+      </div>
+
+      <div class="control" style="margin-top:14px;">
+        <label>Theme</label>
+        <div class="theme-row">
+          <button data-theme-btn="dark">Dark</button>
+          <button data-theme-btn="light">Light</button>
+          <button data-theme-btn="black">Pitch black</button>
+          <button data-theme-btn="sepia">Sepia</button>
+          <button data-theme-btn="midnight">Midnight</button>
+          <button data-theme-btn="custom">Custom</button>
+        </div>
+        <div class="color-row">
+          <label>Background <input type="color" id="bgColor" value="#0f1115"></label>
+          <label>Text <input type="color" id="textColor" value="#e8e9ed"></label>
+          <label>Accent <input type="color" id="accentColor" value="#ff5555"></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay full" id="libraryOverlay">
+    <div class="sheet">
+      <div class="lib-inner">
+        <div class="lib-head">
+          <h1>Library</h1>
+          <div class="lib-head-btns">
+            <button class="pill-btn" id="editLibBtn">Edit</button>
+            <button class="pill-btn" data-close="libraryOverlay">Done</button>
+          </div>
+        </div>
+        <input type="file" id="fileInput" accept=".epub" multiple style="display:none">
+        <div class="lib-add">
+          <button class="upload-btn" id="uploadBtn">＋ Add EPUBs</button>
+          <button class="pill-btn" id="pasteToggle">Paste text</button>
+        </div>
+        <div id="pasteWrap">
+          <textarea id="pasteArea" placeholder="Paste text and save it as a book"></textarea>
+          <button class="save-paste-btn" id="savePasteBtn">Save pasted text as a book</button>
+        </div>
+
+        <div id="bookList"></div>
+        <div class="note">Books are stored on this device only — nothing is uploaded anywhere.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="searchOverlay">
+    <div class="sheet">
+      <h2>Search this book <span class="close" data-close="searchOverlay">Done</span></h2>
+      <input type="text" id="searchInput" placeholder="Find a word or phrase...">
+      <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="bookViewOverlay">
+    <div class="sheet tall">
+      <h2>Book view <span class="close" data-close="bookViewOverlay">Done</span></h2>
+      <div class="bv-hint">Tap any word to jump back into speed-reading mode from there.</div>
+      <div class="book-content" id="bookViewContent"></div>
+    </div>
+  </div>
+
+<script>
+(function() {
+  let words = [];
+  let chunks = [];
+  let idx = 0;
+  let playing = false;
+  let timerId = null;
+  let currentBookId = null;
+  let currentBookText = '';
+
+  const els = {};
+  ['row','segLeft','segOrp','segRight','playBtn','backBtn','fwdBtn','wpm','wpmVal','wpmBadge',
+   'chunk','chunkVal','fontSize','fontVal','punctMult','punctVal','orpToggle','progressBar','paraMult','paraVal','longToggle','rewind','rewindVal','rampToggle',
+   'wordCount','timeLeft','bookTitle','settingsBtn','settingsOverlay','libraryBtn','libraryOverlay',
+   'searchBtn','searchOverlay','fileInput','uploadBtn','pasteArea','savePasteBtn','bookList',
+   'searchInput','searchResults','bgColor','textColor',
+   'accentColor','resumeBanner','resumeText','resumeBtn','bookViewBtn','bookViewOverlay','bookViewContent'
+  ].forEach(id => els[id] = document.getElementById(id));
+
+  const toastWrap = document.getElementById('toastWrap');
+  function toast(msg, isErr) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (isErr ? ' err' : '');
+    el.textContent = msg;
+    toastWrap.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, isErr ? 4500 : 2200);
+  }
+
+  function lsGet(key, fallback) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+    catch (e) { return fallback; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+    catch (e) { console.warn('storage failed', e); return false; }
+  }
+
+  // ---------- IndexedDB for book text (localStorage is ~5MB, too small for books) ----------
+  let dbPromise = null;
+  function openDB() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      let req;
+      try { req = indexedDB.open('rsvp_reader', 1); }
+      catch (e) { reject(e); return; }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('books')) db.createObjectStore('books');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+  async function idbPut(key, val) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').put(val, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('Storage write aborted (device may be out of space)'));
+    });
+  }
+  async function idbGet(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction('books', 'readonly').objectStore('books').get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbDelete(key) {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+
+  function getLibrary() { return lsGet('rsvp_library', []); }
+  function saveLibrary(lib) { return lsSet('rsvp_library', lib); }
+
+  let settings = Object.assign({
+    wpm: 250, chunk: 1, font: 44, punct: 16, orp: true,
+    para: 25, longWords: true, rewind: 4, ramp: true,
+    theme: 'dark', bg: '#0f1115', text: '#e8e9ed', accent: '#ff5555'
+  }, lsGet('rsvp_settings', {}));
+
+  function rewindLabel(n) { return n == 0 ? 'off' : n + (n == 1 ? ' word' : ' words'); }
+
+  function applySettingsToUI() {
+    els.wpm.value = settings.wpm; els.wpmVal.textContent = settings.wpm; els.wpmBadge.textContent = settings.wpm + ' wpm';
+    els.chunk.value = settings.chunk; els.chunkVal.textContent = settings.chunk;
+    els.fontSize.value = settings.font; els.fontVal.textContent = settings.font;
+    els.punctMult.value = settings.punct; els.punctVal.textContent = (settings.punct/10).toFixed(1) + 'x';
+    els.orpToggle.checked = settings.orp;
+    els.paraMult.value = settings.para; els.paraVal.textContent = (settings.para/10).toFixed(1) + 'x';
+    els.longToggle.checked = settings.longWords;
+    els.rewind.value = settings.rewind; els.rewindVal.textContent = rewindLabel(settings.rewind);
+    els.rampToggle.checked = settings.ramp;
+    els.bgColor.value = settings.bg; els.textColor.value = settings.text; els.accentColor.value = settings.accent;
+    applyTheme();
+  }
+
+  const THEMES = {
+    dark:     { mode: 'dark',  bg: '#0f1115', panel: '#171a21', panel2: '#1e222b', text: '#e8e9ed', muted: '#8a8f9c', border: '#2a2e38' },
+    light:    { mode: 'light', bg: '#f4f5f7', panel: '#ffffff', panel2: '#eef0f3', text: '#1b1d22', muted: '#6b7280', border: '#e2e4e9' },
+    black:    { mode: 'dark',  bg: '#000000', panel: '#0c0c0c', panel2: '#161616', text: '#f2f2f2', muted: '#7a7a7a', border: '#222222', minimal: true },
+    sepia:    { mode: 'light', bg: '#f4ecd8', panel: '#fbf5e6', panel2: '#ece2c9', text: '#3b2f1e', muted: '#8a7a5e', border: '#dccfb0' },
+    midnight: { mode: 'dark',  bg: '#0b1426', panel: '#111d35', panel2: '#182744', text: '#dfe7f5', muted: '#7d8cab', border: '#23355a' }
+  };
+  const themeBtns = document.querySelectorAll('[data-theme-btn]');
+
+  function applyTheme() {
+    const root = document.documentElement.style;
+    let t;
+    if (settings.theme === 'custom') {
+      const base = THEMES.dark;
+      t = Object.assign({}, base, { bg: settings.bg, text: settings.text, panel: 'color-mix(in srgb, ' + settings.bg + ' 88%, ' + settings.text + ')',
+            panel2: 'color-mix(in srgb, ' + settings.bg + ' 80%, ' + settings.text + ')', border: 'color-mix(in srgb, ' + settings.bg + ' 75%, ' + settings.text + ')',
+            muted: 'color-mix(in srgb, ' + settings.text + ' 55%, ' + settings.bg + ')' });
+    } else {
+      t = THEMES[settings.theme] || THEMES.dark;
+    }
+    document.documentElement.setAttribute('data-theme', t.mode);
+    ['bg','panel','panel2','text','muted','border'].forEach(k => root.setProperty('--' + k, t[k]));
+    root.setProperty('--accent', settings.accent || '#ff5555');
+    document.body.classList.toggle('minimal', !!t.minimal);
+    themeBtns.forEach(b => b.classList.toggle('active', b.dataset.themeBtn === settings.theme));
+    renderWord && chunks && renderWord();
+  }
+
+  function persistSettings() { lsSet('rsvp_settings', settings); }
+
+  document.querySelectorAll('[data-close]').forEach(el => {
+    el.addEventListener('click', () => document.getElementById(el.dataset.close).classList.remove('show'));
+  });
+  els.settingsBtn.addEventListener('click', () => els.settingsOverlay.classList.add('show'));
+  els.libraryBtn.addEventListener('click', () => { resetLibEdit(); renderBookList(); els.libraryOverlay.classList.add('show'); });
+  els.searchBtn.addEventListener('click', () => {
+    els.searchInput.value = ''; els.searchResults.innerHTML = '';
+    els.searchOverlay.classList.add('show');
+    setTimeout(() => els.searchInput.focus(), 100);
+  });
+  document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('show'); });
+  });
+
+  // \u200B marks a break we inserted after an em/en dash (so "dark—and" flashes as "dark—" then "and")
+  function tokenize(text) { return text.split(/[\s\u200B]+/).filter(Boolean); }
+
+  // paraEnd[i] = 1 when word i is the last word of a paragraph
+  let paraEnd = new Uint8Array(0);
+  function splitParagraphs(text) { return text.split(/\s*\n\s*/).map(p => p.trim()).filter(Boolean); }
+  function buildParaEnds(text) {
+    paraEnd = new Uint8Array(words.length);
+    let wi = 0;
+    for (const p of splitParagraphs(text)) {
+      wi += tokenize(p).length;
+      if (wi > 0 && wi <= words.length) paraEnd[wi - 1] = 1;
+    }
+  }
+
+  function chunkSize() { return parseInt(els.chunk.value, 10) || 1; }
+  function currentWord() { return chunks[idx] ? chunks[idx].startWord : 0; }
+  function jumpToWord(wi) {
+    idx = Math.max(0, Math.min(Math.floor(wi / chunkSize()), chunks.length ? chunks.length - 1 : 0));
+    renderWord();
+  }
+  function buildChunksFromWords(startWord) {
+    const size = chunkSize();
+    chunks = [];
+    for (let i = 0; i < words.length; i += size) chunks.push({ w: words.slice(i, i + size), startWord: i });
+    jumpToWord(startWord || 0);
+  }
+
+  function orpIndex(word) {
+    const len = word.replace(/[^a-zA-Z0-9]/g, '').length || word.length;
+    if (len <= 1) return 0;
+    if (len <= 5) return 1;
+    if (len <= 9) return 2;
+    if (len <= 13) return 3;
+    return 4;
+  }
+
+  // Width of one monospace character as a fraction of font size (measured once)
+  let charRatio = null;
+  function getCharRatio() {
+    if (charRatio) return charRatio;
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '600 100px ' + getComputedStyle(els.row).fontFamily;
+    charRatio = c.measureText('MMMMMMMMMM').width / 1000 || 0.6;
+    return charRatio;
+  }
+
+  // Shrink the font for this word only if its longer half wouldn't fit beside the fixed center
+  function fitFont(leftLen, orpLen, rightLen, centered) {
+    const base = parseInt(els.fontSize.value, 10);
+    const avail = els.row.clientWidth - 24;               // minus row padding + breathing room
+    const cw = base * getCharRatio();
+    let needed;
+    if (centered) needed = (Math.max(leftLen, rightLen) * 2 + orpLen) * cw;  // ORP pinned to middle
+    else needed = (leftLen + orpLen + rightLen) * cw;
+    const scale = needed > avail ? avail / needed : 1;
+    els.row.style.fontSize = Math.max(12, Math.floor(base * scale)) + 'px';
+  }
+
+  function renderWord() {
+    const chunk = chunks[idx];
+    els.row.style.fontSize = els.fontSize.value + 'px';
+    if (!chunk) {
+      els.segLeft.textContent = ''; els.segOrp.textContent = chunks.length ? '' : 'ready'; els.segRight.textContent = '';
+      els.segOrp.classList.remove('hl');
+      updateStats();
+      return;
+    }
+    const cw = chunk.w;
+    if (cw.length === 1 && els.orpToggle.checked) {
+      const w = cw[0];
+      const lead = w.match(/^[^a-zA-Z0-9]*/)[0].length;  // skip leading quotes, brackets, etc.
+      const i = Math.min(lead + orpIndex(w), Math.max(w.length - 1, 0));
+      els.segLeft.textContent = w.slice(0, i);
+      els.segOrp.textContent = w[i] || '';
+      els.segOrp.classList.add('hl');
+      els.segRight.textContent = w.slice(i + 1);
+      fitFont(i, 1, Math.max(w.length - i - 1, 0), true);
+    } else {
+      const t = cw.join(' ');
+      els.segLeft.textContent = '';
+      els.segOrp.textContent = t;
+      els.segOrp.classList.remove('hl');
+      els.segRight.textContent = '';
+      fitFont(0, t.length, 0, false);
+    }
+    updateStats();
+  }
+
+  function updateStats() {
+    els.wordCount.textContent = (words.length ? currentWord() + 1 : 0).toLocaleString() + ' / ' + words.length.toLocaleString();
+    const pct = chunks.length ? (idx / chunks.length) * 100 : 0;
+    els.progressBar.style.width = pct + '%';
+    const wpm = parseInt(els.wpm.value, 10);
+    const remaining = words.length - (chunks[idx] ? chunks[idx].startWord : words.length);
+    const totalSeconds = Math.max(0, Math.round((remaining / wpm) * 60));
+    const m = Math.floor(totalSeconds / 60), s = totalSeconds % 60;
+    els.timeLeft.textContent = chunks.length ? (m + ':' + String(s).padStart(2,'0') + ' left') : '--:--';
+    // save position at most every few seconds while playing (not on every word)
+    if (currentBookId && (!playing || Date.now() - lastSave > 3000)) saveBookmark();
+  }
+
+  function delayForChunk(chunk) {
+    const perWord = 60000 / parseInt(els.wpm.value, 10);
+    let ms = 0;
+    chunk.w.forEach((w, j) => {
+      let t = perWord;
+      // long words: +6% per letter past 8, capped at +50%
+      if (settings.longWords) {
+        const len = w.replace(/[^\p{L}\p{N}]/gu, '').length;
+        if (len > 8) t *= Math.min(1.5, 1 + (len - 8) * 0.06);
+      }
+      ms += t;
+    });
+    // pause after the chunk: paragraph break beats punctuation
+    const last = chunk.startWord + chunk.w.length - 1;
+    const anyParaEnd = chunk.w.some((_, j) => paraEnd[chunk.startWord + j]);
+    if (anyParaEnd || paraEnd[last]) ms += perWord * (settings.para / 10 - 1);
+    else if (chunk.w.some(w => /[.,;:!?)"”’]$/.test(w) && /[.,;:!?]/.test(w))) ms += perWord * (parseInt(els.punctMult.value, 10) / 10 - 1);
+
+    // ease in: start at 60% speed and reach full speed over ~2 seconds after resuming
+    if (settings.ramp && rampStart) {
+      const p = (performance.now() - rampStart) / 2000;
+      if (p < 1) ms /= (0.6 + 0.4 * p); else rampStart = 0;
+    }
+    return ms;
+  }
+
+  // idx always points at the chunk currently on screen
+  function tick() {
+    if (!playing) return;
+    renderWord();
+    timerId = setTimeout(() => {
+      if (idx >= chunks.length - 1) { stop(); toast('Finished!'); return; }
+      idx++;
+      tick();
+    }, delayForChunk(chunks[idx]));
+  }
+
+  let wakeLock = null;
+  async function keepScreenOn(on) {
+    try {
+      if (on && 'wakeLock' in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) { /* not allowed here; ignore */ }
+  }
+
+  // rewind only when picking back up after a pause / reopening a book,
+  // not right after you deliberately jumped somewhere (search, book view, ±10)
+  let canRewind = false;
+  let rampStart = 0;
+  function play() {
+    if (!chunks.length || playing) return;
+    if (idx >= chunks.length - 1 && chunks.length > 1) { idx = 0; canRewind = false; }
+    if (canRewind && settings.rewind > 0) {
+      idx = Math.max(0, Math.floor((currentWord() - settings.rewind) / chunkSize()));
+    }
+    canRewind = false;
+    rampStart = performance.now();
+    playing = true; els.playBtn.textContent = '⏸ Pause'; document.body.classList.add('playing');
+    keepScreenOn(true);
+    tick();
+  }
+  function stop() {
+    if (timerId) clearTimeout(timerId); timerId = null;
+    if (playing) canRewind = true;
+    playing = false; els.playBtn.textContent = '▶ Play'; document.body.classList.remove('playing');
+    keepScreenOn(false);
+    if (currentBookId) saveBookmark();
+  }
+  els.playBtn.addEventListener('click', () => playing ? stop() : play());
+  els.backBtn.addEventListener('click', () => { idx = Math.max(0, idx - 10); canRewind = false; renderWord(); });
+  els.fwdBtn.addEventListener('click', () => { idx = Math.min(Math.max(chunks.length - 1, 0), idx + 10); canRewind = false; renderWord(); });
+
+  els.wpm.addEventListener('input', () => { settings.wpm = parseInt(els.wpm.value,10); els.wpmVal.textContent = settings.wpm; els.wpmBadge.textContent = settings.wpm + ' wpm'; updateStats(); persistSettings(); });
+  els.chunk.addEventListener('input', () => { settings.chunk = parseInt(els.chunk.value,10); els.chunkVal.textContent = settings.chunk; const wi = currentWord(); stop(); buildChunksFromWords(wi); persistSettings(); });
+  els.fontSize.addEventListener('input', () => { settings.font = parseInt(els.fontSize.value,10); els.fontVal.textContent = settings.font; renderWord(); persistSettings(); });
+  els.punctMult.addEventListener('input', () => { settings.punct = parseInt(els.punctMult.value,10); els.punctVal.textContent = (settings.punct/10).toFixed(1)+'x'; persistSettings(); });
+  els.paraMult.addEventListener('input', () => { settings.para = parseInt(els.paraMult.value,10); els.paraVal.textContent = (settings.para/10).toFixed(1)+'x'; persistSettings(); });
+  els.longToggle.addEventListener('change', () => { settings.longWords = els.longToggle.checked; persistSettings(); });
+  els.rewind.addEventListener('input', () => { settings.rewind = parseInt(els.rewind.value,10); els.rewindVal.textContent = rewindLabel(settings.rewind); persistSettings(); });
+  els.rampToggle.addEventListener('change', () => { settings.ramp = els.rampToggle.checked; persistSettings(); });
+  els.orpToggle.addEventListener('change', () => { settings.orp = els.orpToggle.checked; renderWord(); persistSettings(); });
+
+  themeBtns.forEach(b => b.addEventListener('click', () => { settings.theme = b.dataset.themeBtn; applyTheme(); persistSettings(); }));
+  [els.bgColor, els.textColor].forEach(inp => {
+    inp.addEventListener('input', () => {
+      settings.bg = els.bgColor.value; settings.text = els.textColor.value;
+      settings.theme = 'custom'; applyTheme(); persistSettings();
+    });
+  });
+  // accent color applies to every theme, so changing it doesn't force Custom
+  els.accentColor.addEventListener('input', () => { settings.accent = els.accentColor.value; applyTheme(); persistSettings(); });
+
+  // tap the word area to play/pause (the only visible control in Pitch black while reading)
+  document.querySelector('.stage-outer').addEventListener('click', () => playing ? stop() : play());
+
+  let lastSave = 0;
+  function saveBookmark() {
+    if (!currentBookId) return;
+    if (currentWord() === 0 && !lsGet('rsvp_bookmark_' + currentBookId, null)) return;
+    lastSave = Date.now();
+    lsSet('rsvp_bookmark_' + currentBookId, { word: currentWord(), updatedAt: lastSave });
+  }
+  function readBookmarkWord(bookId) {
+    const bm = lsGet('rsvp_bookmark_' + bookId, null);
+    if (!bm) return 0;
+    if (typeof bm.word === 'number') return bm.word;
+    if (typeof bm.idx === 'number') return bm.idx * (bm.chunk || 1);   // old format
+    return 0;
+  }
+
+  function loadBookText(bookId, title, text) {
+    const resumeAt = readBookmarkWord(bookId);   // read first, before anything saves over it
+    currentBookId = null;                          // block saves while building
+    currentBookText = text;
+    els.bookTitle.textContent = title;
+    words = tokenize(text);
+    buildParaEnds(text);
+    buildChunksFromWords(resumeAt);
+    currentBookId = bookId;
+    lsSet('rsvp_last_book', bookId);
+    canRewind = resumeAt > 0;
+    if (resumeAt > 0 && words.length) toast('Picked up where you left off (' + Math.round(resumeAt / words.length * 100) + '%)');
+  }
+
+  // save position when the app is backgrounded / closed, and pause so it doesn't "read" unseen
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { if (playing) stop(); else saveBookmark(); } });
+  window.addEventListener('pagehide', saveBookmark);
+
+  async function openBook(id) {
+    const lib = getLibrary();
+    const meta = lib.find(b => b.id === id);
+    if (!meta) return;
+    let text = '';
+    try { text = await idbGet(id) || ''; } catch (e) { console.error(e); }
+    if (!text) text = lsGet('rsvp_book_' + id, '');
+    if (!text) { toast('Could not load this book — it may have been removed from storage.', true); return; }
+    stop();
+    loadBookText(id, meta.title, text);
+    els.libraryOverlay.classList.remove('show');
+  }
+
+  function deleteBook(id) {
+    let lib = getLibrary().filter(b => b.id !== id);
+    saveLibrary(lib);
+    idbDelete(id);
+    idbDelete('cover_' + id);
+    delete coverCache[id];
+    try { localStorage.removeItem('rsvp_book_' + id); localStorage.removeItem('rsvp_bookmark_' + id); } catch(e) {}
+    renderBookList();
+    if (currentBookId === id) { stop(); currentBookId = null; currentBookText = ''; els.bookTitle.textContent = 'No book loaded'; words = []; chunks = []; idx = 0; renderWord(); }
+  }
+
+  const coverCache = {};
+  let libEditing = false;
+
+  function placeholderCover(b) {
+    let h = 0; for (const ch of b.title) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const hue = h % 360;
+    return `<div class="cover-ph" style="background:linear-gradient(160deg,hsl(${hue},45%,38%),hsl(${(hue + 40) % 360},50%,22%))">
+      <div class="t">${escapeHtml(b.title)}</div><div class="a">${escapeHtml(b.author || '')}</div></div>`;
+  }
+
+  function renderBookList() {
+    const lib = getLibrary();
+    if (!lib.length) {
+      libEditing = false;
+      els.bookList.innerHTML = '<div class="empty-lib">No books yet. Tap “Add EPUBs” to get started.</div>';
+      return;
+    }
+    const rows = lib.map(b => {
+      const bm = lsGet('rsvp_bookmark_' + b.id, null);
+      const word = readBookmarkWord(b.id);
+      const pct = b.wordCount ? Math.min(100, Math.round(word / b.wordCount * 100)) : 0;
+      return { b, pct, lastRead: bm && bm.updatedAt ? bm.updatedAt : 0 };
+    });
+    rows.sort((x, y) => (y.lastRead - x.lastRead) || (y.b.addedAt - x.b.addedAt));
+
+    const wpm = parseInt(els.wpm.value, 10) || 350;
+    const cardHTML = r => {
+      const b = r.b;
+      const minsLeft = Math.round(b.wordCount * (1 - r.pct / 100) / wpm);
+      const timeLeft = minsLeft >= 60 ? Math.floor(minsLeft / 60) + 'h ' + (minsLeft % 60) + 'm' : minsLeft + 'm';
+      const meta = r.lastRead === 0 ? (b.author ? escapeHtml(b.author) : timeLeft + ' read')
+        : r.pct >= 99 ? 'Finished'
+        : r.pct + '% · ' + timeLeft + ' left';
+      const coverInner = coverCache[b.id] ? `<img src="${coverCache[b.id]}" alt="">` : placeholderCover(b);
+      return `
+      <div class="card" data-open="${b.id}" title="${escapeHtml(b.title)}${r.lastRead ? ' — last read ' + relTime(r.lastRead) : ''}">
+        <div class="cover" data-cover="${b.hasCover ? b.id : ''}">
+          ${coverInner}
+          ${b.id === currentBookId ? '<span class="badge">Reading</span>' : ''}
+          <button class="del" data-del="${b.id}" aria-label="Delete">✕</button>
+        </div>
+        <div class="card-title">${escapeHtml(b.title)}</div>
+        <div class="card-meta">${meta}</div>
+        ${r.lastRead ? `<div class="book-prog"><div style="width:${r.pct}%"></div></div>` : ''}
+      </div>`;
+    };
+    const started = rows.filter(r => r.lastRead), fresh = rows.filter(r => !r.lastRead);
+    const grid = list => '<div class="grid' + (libEditing ? ' editing' : '') + '">' + list.map(cardHTML).join('') + '</div>';
+    els.bookList.innerHTML =
+      (started.length ? '<div class="lib-section">Continue reading</div>' + grid(started) : '') +
+      (fresh.length ? '<div class="lib-section">Not started</div>' + grid(fresh) : '');
+
+    // load covers from storage without blocking the page
+    els.bookList.querySelectorAll('[data-cover]').forEach(async el => {
+      const id = el.dataset.cover;
+      if (!id || coverCache[id]) return;
+      try {
+        const url = await idbGet('cover_' + id);
+        if (url) {
+          coverCache[id] = url;
+          const ph = el.querySelector('.cover-ph');
+          if (ph) { const img = new Image(); img.src = url; img.alt = ''; ph.replaceWith(img); }
+        }
+      } catch (e) {}
+    });
+  }
+
+  // one click handler for the whole grid: open, or delete in edit mode
+  els.bookList.addEventListener('click', e => {
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      e.stopPropagation();
+      const b = getLibrary().find(x => x.id === del.dataset.del);
+      deleteBook(del.dataset.del);
+      if (b) toast('Removed "' + b.title + '".');
+      return;
+    }
+    const card = e.target.closest('[data-open]');
+    if (card && !libEditing) openBook(card.dataset.open);
+  });
+
+  const editLibBtn = document.getElementById('editLibBtn');
+  editLibBtn.addEventListener('click', () => {
+    libEditing = !libEditing;
+    editLibBtn.textContent = libEditing ? 'Finish' : 'Edit';
+    editLibBtn.classList.toggle('on', libEditing);
+    renderBookList();
+  });
+  document.getElementById('pasteToggle').addEventListener('click', () => {
+    document.getElementById('pasteWrap').classList.toggle('show');
+  });
+  function resetLibEdit() { libEditing = false; editLibBtn.textContent = 'Edit'; editLibBtn.classList.remove('on'); }
+
+  function relTime(t) {
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    const h = Math.round(m / 60);
+    if (h < 24) return h + 'h ago';
+    const d = Math.round(h / 24);
+    return d === 1 ? 'yesterday' : d < 30 ? d + ' days ago' : new Date(t).toLocaleDateString();
+  }
+
+  function escapeHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  async function addBookToLibrary(title, text, type, extra) {
+    extra = extra || {};
+    const id = 'b' + Date.now() + Math.random().toString(36).slice(2,8);
+    const wc = tokenize(text).length;
+    try {
+      await idbPut(id, text);
+      if (extra.cover) { try { await idbPut('cover_' + id, extra.cover); } catch (e) { extra.cover = null; } }
+    } catch (e) {
+      console.error(e);
+      toast('Could not save "' + title + '": ' + (e && e.message ? e.message : 'storage error'), true);
+      return null;
+    }
+    const lib = getLibrary();
+    lib.push({ id, title, author: extra.author || '', hasCover: !!extra.cover, wordCount: wc, type, addedAt: Date.now() });
+    const ok = saveLibrary(lib);
+    if (!ok) {
+      await idbDelete(id);
+      toast('Could not update the library index for "' + title + '".', true);
+    } else if (wc === 0) {
+      toast('"' + title + '" saved but contains no readable text (it may be DRM-protected).', true);
+    } else {
+      toast('Added "' + title + '" (' + wc.toLocaleString() + ' words) to your library.');
+    }
+    renderBookList();
+    return id;
+  }
+
+  els.savePasteBtn.addEventListener('click', async () => {
+    const text = els.pasteArea.value.trim();
+    if (!text) return;
+    const title = text.split(/\s+/).slice(0,5).join(' ') + '…';
+    await addBookToLibrary(title, text, 'pasted text');
+    els.pasteArea.value = '';
+  });
+
+  els.uploadBtn.addEventListener('click', () => els.fileInput.click());
+  els.fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      try {
+        els.uploadBtn.textContent = 'Parsing ' + file.name + '...';
+        const { title, author, cover, text } = await parseEpub(file);
+        const newId = await addBookToLibrary(title || file.name.replace(/\.epub$/i,''), text, 'epub', { author, cover });
+        if (newId && files.length === 1) await openBook(newId);
+      } catch (err) {
+        console.error(err);
+        toast('Could not parse "' + file.name + '": ' + err.message, true);
+      }
+    }
+    els.uploadBtn.textContent = '＋ Upload EPUB (any number of files)';
+    els.fileInput.value = '';
+  });
+
+  function resolvePath(base, rel) {
+    if (rel.startsWith('/')) return rel.slice(1);
+    const baseParts = base.split('/'); baseParts.pop();
+    const relParts = rel.split('/');
+    for (const p of relParts) {
+      if (p === '.' ) continue;
+      else if (p === '..') baseParts.pop();
+      else baseParts.push(p);
+    }
+    return baseParts.join('/');
+  }
+
+  // Shrink the cover to a small JPEG so a big library stays light
+  function makeThumb(blob) {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const W = 360, scale = Math.min(1, W / img.naturalWidth);
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        try { resolve(c.toDataURL('image/jpeg', 0.82)); } catch (e) { resolve(null); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      setTimeout(() => resolve(null), 8000);   // never let a weird image stall the upload
+      img.src = url;
+    });
+  }
+
+  const BLOCK = new Set(['P','DIV','H1','H2','H3','H4','H5','H6','LI','BLOCKQUOTE','SECTION','ARTICLE','PRE',
+    'TD','TH','DD','DT','FIGCAPTION','HEADER','FOOTER','ASIDE','BODY','TR','CAPTION']);
+  function extractParagraphs(doc) {
+    const body = doc.body;
+    // remove things that aren't reading text: scripts/styles, and footnote markers like <sup>1</sup>
+    body.querySelectorAll('script, style, noscript').forEach(el => el.remove());
+    body.querySelectorAll('sup, a[epub\\:type="noteref"], a[role="doc-noteref"]').forEach(el => {
+      if (/^[\s\d*†‡§¶\[\]().,a-z]{0,6}$/i.test(el.textContent)) el.remove();
+    });
+    body.querySelectorAll('br').forEach(br => br.replaceWith(' '));
+
+    const paras = [];
+    let curBlock = null, buf = '';
+    const flush = () => { const t = buf.replace(/\s+/g, ' ').trim(); if (t) paras.push(t); buf = ''; };
+    const walker = doc.createTreeWalker(body, 4 /* NodeFilter.SHOW_TEXT */);
+    let node;
+    while ((node = walker.nextNode())) {
+      let el = node.parentElement;
+      while (el && !BLOCK.has(el.tagName.toUpperCase())) el = el.parentElement;
+      if (el !== curBlock) { flush(); curBlock = el; }
+      buf += node.nodeValue;
+    }
+    flush();
+    // let words joined by em/en dashes break apart when flashed (invisible marker, so the book view still reads normally)
+    return paras.map(t => t.replace(/([—–])(?=[^\s—–])/g, '$1\u200B'));
+  }
+
+  async function parseEpub(file) {
+    const zip = await JSZip.loadAsync(file);
+    const containerFile = zip.file('META-INF/container.xml');
+    if (!containerFile) throw new Error('Not a valid EPUB (missing META-INF/container.xml)');
+    const containerXml = await containerFile.async('string');
+    const containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+    const rootfileEl = containerDoc.querySelector('rootfile');
+    if (!rootfileEl) throw new Error('Could not find the EPUB package file (rootfile)');
+    const rootfilePath = rootfileEl.getAttribute('full-path');
+    const opfFile = zip.file(rootfilePath);
+    if (!opfFile) throw new Error('Package file "' + rootfilePath + '" not found in the zip');
+    const opfXml = await opfFile.async('string');
+    const opfDoc = new DOMParser().parseFromString(opfXml, 'application/xml');
+
+    let title = '';
+    const titleEl = opfDoc.getElementsByTagName('dc:title')[0] || opfDoc.getElementsByTagName('title')[0];
+    if (titleEl) title = titleEl.textContent.trim();
+
+    let author = '';
+    const authorEl = opfDoc.getElementsByTagName('dc:creator')[0] || opfDoc.getElementsByTagName('creator')[0];
+    if (authorEl) author = authorEl.textContent.trim();
+
+    const manifest = {};
+    const items = Array.from(opfDoc.querySelectorAll('manifest > item'));
+    items.forEach(item => { manifest[item.getAttribute('id')] = item.getAttribute('href'); });
+
+    // Find the cover image: EPUB3 "cover-image" property, then EPUB2 <meta name="cover">, then any image named like a cover
+    let coverItem = items.find(i => (i.getAttribute('properties') || '').split(/\s+/).includes('cover-image'));
+    if (!coverItem) {
+      const metaCover = Array.from(opfDoc.getElementsByTagName('meta')).find(m => m.getAttribute('name') === 'cover');
+      if (metaCover) coverItem = items.find(i => i.getAttribute('id') === metaCover.getAttribute('content'));
+    }
+    if (!coverItem) coverItem = items.find(i => /^image\//.test(i.getAttribute('media-type') || '') && /cover/i.test((i.getAttribute('id') || '') + (i.getAttribute('href') || '')));
+    let cover = null;
+    if (coverItem) {
+      try {
+        const cpath = resolvePath(rootfilePath, coverItem.getAttribute('href'));
+        let cfile = zip.file(cpath) || zip.file(decodeURIComponent(cpath));
+        if (cfile) {
+          const raw = await cfile.async('blob');
+          const blob = new Blob([raw], { type: coverItem.getAttribute('media-type') || 'image/jpeg' });
+          cover = await makeThumb(blob);
+        }
+      } catch (e) { console.warn('cover extraction failed', e); }
+    }
+    const spineIds = Array.from(opfDoc.querySelectorAll('spine > itemref')).map(el => el.getAttribute('idref'));
+
+    let fullText = [];
+    for (const id of spineIds) {
+      const href = manifest[id];
+      if (!href) continue;
+      const path = resolvePath(rootfilePath, href);
+      let zfile = zip.file(path);
+      if (!zfile) {
+        try { zfile = zip.file(decodeURIComponent(path)); } catch (e) {}
+      }
+      if (!zfile) continue;
+      const html = await zfile.async('string');
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      if (doc.body) {
+        const paras = extractParagraphs(doc);
+        if (paras.length) fullText.push(paras.join('\n\n'));
+      }
+    }
+    return { title, author, cover, text: fullText.join('\n\n') };
+  }
+
+  let searchTimer = null;
+  els.searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 150);
+  });
+  const norm = w => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+  function matchesAt(i, q) {
+    if (q.length === 1) return norm(words[i]).includes(q[0]);
+    if (i + q.length > words.length) return false;
+    for (let j = 0; j < q.length; j++) {
+      const w = norm(words[i + j]);
+      if (j === 0 ? !w.endsWith(q[j]) : j === q.length - 1 ? !w.startsWith(q[j]) : w !== q[j]) return false;
+    }
+    return true;
+  }
+  function runSearch() {
+    const q = tokenize(els.searchInput.value).map(norm).filter(Boolean);
+    if (!q.length || !words.length) { els.searchResults.innerHTML = ''; return; }
+    const MAX = 60;
+    const results = [];
+    let total = 0;
+    for (let i = 0; i < words.length; i++) {
+      if (matchesAt(i, q)) {
+        total++;
+        if (results.length < MAX) {
+          const n = q.length;
+          results.push({ wi: i, before: words.slice(Math.max(0, i - 5), i), match: words.slice(i, i + n), after: words.slice(i + n, i + n + 5) });
+        }
+      }
+    }
+    if (!results.length) { els.searchResults.innerHTML = '<div class="empty-lib">No matches.</div>'; return; }
+    const header = '<div class="bv-hint" style="margin:0 0 6px">' + total.toLocaleString() + ' match' + (total === 1 ? '' : 'es') +
+      (total > MAX ? ' — showing the first ' + MAX + ', try a longer phrase to narrow it down' : '') + '</div>';
+    els.searchResults.innerHTML = header + results.map(r => `
+      <div class="result-row" data-idx="${r.wi}">
+        ${escapeHtml(r.before.join(' '))} <b>${escapeHtml(r.match.join(' '))}</b> ${escapeHtml(r.after.join(' '))}
+        <span style="color:var(--muted);font-size:11px"> · ${Math.round(r.wi / words.length * 100)}%</span>
+      </div>
+    `).join('');
+    els.searchResults.querySelectorAll('.result-row').forEach(row => {
+      row.addEventListener('click', () => {
+        stop();
+        jumpToWord(parseInt(row.dataset.idx, 10)); canRewind = false;
+        saveBookmark();
+        els.searchOverlay.classList.remove('show');
+      });
+    });
+  }
+
+  function buildBookViewHTML() {
+    const paragraphs = splitParagraphs(currentBookText);
+    let wi = 0;
+    let html = '';
+    if (!paragraphs.length) return '<p style="color:var(--muted)">Nothing loaded yet.</p>';
+    paragraphs.forEach(p => {
+      html += '<p>';
+      // walk words and the gaps between them; a \u200B gap renders with no visible space
+      p.replace(/[^\s\u200B]+|[\s\u200B]+/g, tok => {
+        if (/^[\s\u200B]+$/.test(tok)) { html += /\s/.test(tok) ? ' ' : ''; }
+        else { html += '<span class="bv-word" data-wi="' + wi + '">' + escapeHtml(tok) + '</span>'; wi++; }
+        return tok;
+      });
+      html += '</p>';
+    });
+    return html;
+  }
+
+  let bookViewCache = { text: null, html: '' };
+  els.bookViewBtn.addEventListener('click', () => {
+    if (!words.length) return;
+    stop();
+    const startWord = currentWord();
+    // show the sheet with a spinner first, then build (building a whole novel can take a moment)
+    els.bookViewContent.innerHTML = '<div class="bv-loading"><div class="spinner"></div>Loading book…</div>';
+    els.bookViewOverlay.classList.add('show');
+    setTimeout(() => {
+      if (bookViewCache.text !== currentBookText) {
+        bookViewCache = { text: currentBookText, html: buildBookViewHTML() };
+      }
+      els.bookViewContent.innerHTML = bookViewCache.html;
+      const span = els.bookViewContent.querySelector('[data-wi="' + startWord + '"]');
+      if (span) {
+        span.classList.add('current');
+        requestAnimationFrame(() => span.scrollIntoView({ block: 'center' }));
+      }
+    }, 50);   // gives the browser a frame to actually paint the spinner
+  });
+
+  els.bookViewContent.addEventListener('click', (e) => {
+    const span = e.target.closest('.bv-word');
+    if (!span) return;
+    stop();
+    jumpToWord(parseInt(span.dataset.wi, 10)); canRewind = false;
+    saveBookmark();
+    els.bookViewOverlay.classList.remove('show');
+  });
+
+  window.addEventListener('resize', () => renderWord());
+
+  // Sliders: grab anywhere on the track and drag, even inside the scrolling settings sheet.
+  // (By default the browser treats the first touch as a possible scroll and only the thumb is draggable.)
+  document.querySelectorAll('input[type="range"]').forEach(r => {
+    const setFromX = x => {
+      const rect = r.getBoundingClientRect();
+      const min = +r.min, max = +r.max, step = +r.step || 1;
+      const f = Math.min(1, Math.max(0, (x - rect.left) / rect.width));
+      const v = Math.round((min + f * (max - min) - min) / step) * step + min;
+      if (String(v) !== r.value) { r.value = v; r.dispatchEvent(new Event('input', { bubbles: true })); }
+    };
+    r.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;   // mouse already works natively
+      e.preventDefault();
+      r.setPointerCapture(e.pointerId);
+      setFromX(e.clientX);
+    });
+    r.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'mouse' && r.hasPointerCapture(e.pointerId)) setFromX(e.clientX);
+    });
+  });
+
+  // Keyboard: space = play/pause, ←/→ = back/forward 10
+  document.addEventListener('keydown', e => {
+    if (/INPUT|TEXTAREA/.test(e.target.tagName) || document.querySelector('.overlay.show')) return;
+    if (e.code === 'Space') { e.preventDefault(); playing ? stop() : play(); }
+    else if (e.key === 'ArrowLeft') els.backBtn.click();
+    else if (e.key === 'ArrowRight') els.fwdBtn.click();
+  });
+
+  applySettingsToUI();
+  renderBookList();
+  const lib = getLibrary();
+  if (lib.length) {
+    const last = lsGet('rsvp_last_book', null);
+    openBook(lib.some(b => b.id === last) ? last : lib[lib.length - 1].id);
+  } else {
+    currentBookText = "Upload an EPUB or paste text from the library icon in the top left to get started.";
+    words = tokenize(currentBookText);
+    buildChunksFromWords();
+  }
+})();
+</script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
