@@ -102,11 +102,12 @@
   .progress-wrap { height: 4px; background: var(--panel2); border-radius: 999px; overflow: hidden; }
   .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .08s linear; }
   .stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin: 6px 2px 12px; font-variant-numeric: tabular-nums; }
-  .transport { display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .transport { display: flex; align-items: center; justify-content: center; gap: 10px; }
   .transport button {
     background: var(--panel); border: 1px solid var(--border); color: var(--text);
-    border-radius: 999px; padding: 12px 16px; font-size: 14px;
+    border-radius: 999px; padding: 12px 14px; font-size: 14px; min-width: 46px;
   }
+  .transport .step { font-size: 20px; line-height: 1; padding: 10px 14px; }
   .transport .play {
     background: var(--accent); border-color: var(--accent); color: #fff;
     font-weight: 700; padding: 14px 28px; font-size: 16px;
@@ -253,6 +254,16 @@
   .card-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .card .book-prog { margin-top: 6px; }
 
+  .ch-row { display: flex; align-items: center; gap: 12px; padding: 13px 6px; border-top: 1px solid var(--border); cursor: pointer; }
+  .ch-row:first-child { border-top: none; }
+  .ch-row:active { opacity: .6; }
+  .ch-num { width: 26px; flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ch-title { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch-pct { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ch-row.current .ch-title { color: var(--accent); font-weight: 600; }
+  .ch-row.current .ch-num { color: var(--accent); }
+  .ch-row.done .ch-title { color: var(--muted); }
+
   .bv-hint { font-size: 11.5px; color: var(--muted); margin: -6px 0 14px; }
 
   .toast-wrap {
@@ -281,6 +292,7 @@
     </div>
     <div class="top-title" id="bookTitle">No book loaded</div>
     <div class="top-right">
+      <button class="icon-btn" id="chaptersBtn" title="Chapters">☰</button>
       <button class="icon-btn" id="bookViewBtn" title="Book view">📖</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
     </div>
@@ -310,9 +322,11 @@
       <span id="timeLeft">--:--</span>
     </div>
     <div class="transport">
-      <button id="backBtn">« 10</button>
+      <button id="backBtn" title="Back 10 words">« 10</button>
+      <button class="step" id="prevBtn" title="Back 1 word" aria-label="Back one word">‹</button>
       <button class="play" id="playBtn">▶ Play</button>
-      <button id="fwdBtn">10 »</button>
+      <button class="step" id="nextBtn" title="Forward 1 word" aria-label="Forward one word">›</button>
+      <button id="fwdBtn" title="Forward 10 words">10 »</button>
     </div>
   </div>
 
@@ -413,6 +427,13 @@
     </div>
   </div>
 
+  <div class="overlay" id="chaptersOverlay">
+    <div class="sheet">
+      <h2>Chapters <span class="close" data-close="chaptersOverlay">Done</span></h2>
+      <div id="chapterList"></div>
+    </div>
+  </div>
+
   <div class="overlay" id="bookViewOverlay">
     <div class="sheet tall">
       <h2>Book view <span class="close" data-close="bookViewOverlay">Done</span></h2>
@@ -437,7 +458,7 @@
    'wordCount','timeLeft','bookTitle','settingsBtn','settingsOverlay','libraryBtn','libraryOverlay',
    'searchBtn','searchOverlay','fileInput','uploadBtn','pasteArea','savePasteBtn','bookList',
    'searchInput','searchResults','bgColor','textColor',
-   'accentColor','resumeBanner','resumeText','resumeBtn','bookViewBtn','bookViewOverlay','bookViewContent'
+   'accentColor','resumeBanner','resumeText','resumeBtn','bookViewBtn','bookViewOverlay','bookViewContent','prevBtn','nextBtn','chaptersBtn','chaptersOverlay','chapterList'
   ].forEach(id => els[id] = document.getElementById(id));
 
   const toastWrap = document.getElementById('toastWrap');
@@ -752,6 +773,40 @@
   els.playBtn.addEventListener('click', () => playing ? stop() : play());
   els.backBtn.addEventListener('click', () => { idx = Math.max(0, idx - 10); canRewind = false; renderWord(); });
   els.fwdBtn.addEventListener('click', () => { idx = Math.min(Math.max(chunks.length - 1, 0), idx + 10); canRewind = false; renderWord(); });
+  // single steps; pause first so the word you land on stays put
+  els.prevBtn.addEventListener('click', () => { if (playing) stop(); idx = Math.max(0, idx - 1); canRewind = false; renderWord(); });
+  els.nextBtn.addEventListener('click', () => { if (playing) stop(); idx = Math.min(Math.max(chunks.length - 1, 0), idx + 1); canRewind = false; renderWord(); });
+
+  // ---------- chapter list ----------
+  function renderChapters() {
+    if (!currentChapters || !currentChapters.length) {
+      els.chapterList.innerHTML = '<div class="empty-lib">No chapters found in this book.<br>Books added before chapter support: remove and re-add the EPUB to get its chapter list.</div>';
+      return;
+    }
+    const cur = chapterIndexAt(currentWord());
+    els.chapterList.innerHTML = currentChapters.map((c, i) => `
+      <div class="ch-row${i === cur ? ' current' : i < cur ? ' done' : ''}" data-w="${c.w}">
+        <span class="ch-num">${i + 1}</span>
+        <span class="ch-title">${escapeHtml(c.t)}</span>
+        <span class="ch-pct">${words.length ? Math.round(c.w / words.length * 100) : 0}%</span>
+      </div>`).join('');
+    const curEl = els.chapterList.querySelector('.current');
+    if (curEl) requestAnimationFrame(() => curEl.scrollIntoView({ block: 'center' }));
+  }
+  els.chaptersBtn.addEventListener('click', () => {
+    if (!words.length) return;
+    stop();
+    renderChapters();
+    els.chaptersOverlay.classList.add('show');
+  });
+  els.chapterList.addEventListener('click', e => {
+    const row = e.target.closest('.ch-row');
+    if (!row) return;
+    jumpToWord(parseInt(row.dataset.w, 10)); canRewind = false;
+    saveBookmark();
+    els.chaptersOverlay.classList.remove('show');
+    toast(row.querySelector('.ch-title').textContent);
+  });
 
   els.wpm.addEventListener('input', () => { settings.wpm = parseInt(els.wpm.value,10); els.wpmVal.textContent = settings.wpm; els.wpmBadge.textContent = settings.wpm + ' wpm'; updateStats(); persistSettings(); });
   els.chunk.addEventListener('input', () => { settings.chunk = parseInt(els.chunk.value,10); els.chunkVal.textContent = settings.chunk; const wi = currentWord(); stop(); buildChunksFromWords(wi); persistSettings(); });
@@ -791,25 +846,45 @@
     return 0;
   }
 
-  function loadBookText(bookId, title, text) {
+  let currentChapters = null;
+  // For books added before chapter support (or pasted text): treat short "Chapter …"/"Part …" lines as chapter starts
+  function guessChapters(text) {
+    const out = []; let wi = 0;
+    for (const p of splitParagraphs(text)) {
+      const n = tokenize(p).length;
+      if (p.length <= 80 && /^(chapter|part|book|prologue|epilogue|interlude|afterword|introduction)\b/i.test(p)) out.push({ t: p, w: wi });
+      wi += n;
+    }
+    return out.length >= 2 ? out : [];
+  }
+  function chapterIndexAt(wi) {
+    if (!currentChapters) return -1;
+    let k = -1;
+    for (let i = 0; i < currentChapters.length; i++) { if (currentChapters[i].w <= wi) k = i; else break; }
+    return k;
+  }
+
+  function loadBookText(bookId, title, text, quiet) {
     const resumeAt = readBookmarkWord(bookId);   // read first, before anything saves over it
     currentBookId = null;                          // block saves while building
     currentBookText = text;
     els.bookTitle.textContent = title;
     words = tokenize(text);
     buildParaEnds(text);
+    if (!currentChapters) currentChapters = guessChapters(text);
     buildChunksFromWords(resumeAt);
     currentBookId = bookId;
     lsSet('rsvp_last_book', bookId);
     canRewind = resumeAt > 0;
-    if (resumeAt > 0 && words.length) toast('Picked up where you left off (' + Math.round(resumeAt / words.length * 100) + '%)');
+    if (resumeAt > 0 && words.length && !quiet) toast('Picked up where you left off (' + Math.round(resumeAt / words.length * 100) + '%)');
   }
 
   // save position when the app is backgrounded / closed, and pause so it doesn't "read" unseen
   document.addEventListener('visibilitychange', () => { if (document.hidden) { if (playing) stop(); else saveBookmark(); } });
   window.addEventListener('pagehide', saveBookmark);
 
-  async function openBook(id) {
+  async function openBook(id, opts) {
+    opts = opts || {};
     const lib = getLibrary();
     const meta = lib.find(b => b.id === id);
     if (!meta) return;
@@ -818,8 +893,9 @@
     if (!text) text = lsGet('rsvp_book_' + id, '');
     if (!text) { toast('Could not load this book — it may have been removed from storage.', true); return; }
     stop();
-    loadBookText(id, meta.title, text);
-    els.libraryOverlay.classList.remove('show');
+    currentChapters = meta.chapters && meta.chapters.length ? meta.chapters : null;
+    loadBookText(id, meta.title, text, opts.quiet);
+    if (!opts.stay) els.libraryOverlay.classList.remove('show');
   }
 
   function deleteBook(id) {
@@ -951,7 +1027,7 @@
       return null;
     }
     const lib = getLibrary();
-    lib.push({ id, title, author: extra.author || '', hasCover: !!extra.cover, wordCount: wc, type, addedAt: Date.now() });
+    lib.push({ id, title, author: extra.author || '', hasCover: !!extra.cover, chapters: extra.chapters || null, wordCount: wc, type, addedAt: Date.now() });
     const ok = saveLibrary(lib);
     if (!ok) {
       await idbDelete(id);
@@ -979,8 +1055,8 @@
     for (const file of files) {
       try {
         els.uploadBtn.textContent = 'Parsing ' + file.name + '...';
-        const { title, author, cover, text } = await parseEpub(file);
-        const newId = await addBookToLibrary(title || file.name.replace(/\.epub$/i,''), text, 'epub', { author, cover });
+        const { title, author, cover, chapters, text } = await parseEpub(file);
+        const newId = await addBookToLibrary(title || file.name.replace(/\.epub$/i,''), text, 'epub', { author, cover, chapters });
         if (newId && files.length === 1) await openBook(newId);
       } catch (err) {
         console.error(err);
@@ -1049,6 +1125,52 @@
     return paras.map(t => t.replace(/([—–])(?=[^\s—–])/g, '$1\u200B'));
   }
 
+  function safeDecode(p) { try { return decodeURIComponent(p); } catch (e) { return p; } }
+
+  // Reads the book's own table of contents: EPUB3 nav document, or EPUB2 toc.ncx.
+  // Returns Map(chapter file path -> chapter title), first entry per file wins.
+  async function readToc(zip, opfDoc, items, rootfilePath) {
+    const map = new Map();
+    const add = (basePath, href, label) => {
+      if (!href || !label) return;
+      const file = resolvePath(basePath, href.split('#')[0]);
+      label = label.replace(/\s+/g, ' ').trim();
+      if (label && !map.has(file)) { map.set(file, label); map.set(safeDecode(file), label); }
+    };
+    const getFile = async p => { const f = zip.file(p) || zip.file(safeDecode(p)); return f ? f.async('string') : null; };
+    try {
+      const navItem = items.find(i => (i.getAttribute('properties') || '').split(/\s+/).includes('nav'));
+      if (navItem) {
+        const navPath = resolvePath(rootfilePath, navItem.getAttribute('href'));
+        const html = await getFile(navPath);
+        if (html) {
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const navs = Array.from(doc.querySelectorAll('nav'));
+          const tocNav = navs.find(n => /toc/.test(n.getAttribute('epub:type') || n.getAttribute('type') || n.getAttribute('role') || '')) || navs[0];
+          if (tocNav) tocNav.querySelectorAll('a[href]').forEach(a => add(navPath, a.getAttribute('href'), a.textContent));
+        }
+      }
+      if (map.size < 2) {
+        const spine = opfDoc.querySelector('spine');
+        const ncxId = spine && spine.getAttribute('toc');
+        const ncxItem = items.find(i => i.getAttribute('id') === ncxId) || items.find(i => /ncx/.test(i.getAttribute('media-type') || ''));
+        if (ncxItem) {
+          const ncxPath = resolvePath(rootfilePath, ncxItem.getAttribute('href'));
+          const xml = await getFile(ncxPath);
+          if (xml) {
+            const doc = new DOMParser().parseFromString(xml, 'application/xml');
+            Array.from(doc.getElementsByTagName('navPoint')).forEach(np => {
+              const lbl = np.getElementsByTagName('text')[0];
+              const content = np.getElementsByTagName('content')[0];
+              if (lbl && content) add(ncxPath, content.getAttribute('src'), lbl.textContent);
+            });
+          }
+        }
+      }
+    } catch (e) { console.warn('TOC read failed', e); }
+    return map;
+  }
+
   async function parseEpub(file) {
     const zip = await JSZip.loadAsync(file);
     const containerFile = zip.file('META-INF/container.xml');
@@ -1096,6 +1218,11 @@
     }
     const spineIds = Array.from(opfDoc.querySelectorAll('spine > itemref')).map(el => el.getAttribute('idref'));
 
+    const toc = await readToc(zip, opfDoc, items, rootfilePath);
+    const useToc = toc.size >= 2;
+    const chapters = [];
+    let wordPos = 0;
+
     let fullText = [];
     for (const id of spineIds) {
       const href = manifest[id];
@@ -1109,11 +1236,20 @@
       const html = await zfile.async('string');
       const doc = new DOMParser().parseFromString(html, 'text/html');
       if (doc.body) {
+        const heading = doc.body.querySelector('h1, h2, h3');
+        const headingText = heading ? heading.textContent.replace(/\s+/g, ' ').trim() : '';
         const paras = extractParagraphs(doc);
-        if (paras.length) fullText.push(paras.join('\n\n'));
+        if (paras.length) {
+          const chunk = paras.join('\n\n');
+          let label = useToc ? (toc.get(path) || toc.get(safeDecode(path))) : headingText;
+          if (label && label.length > 90) label = label.slice(0, 87) + '…';
+          if (label) chapters.push({ t: label, w: wordPos });
+          fullText.push(chunk);
+          wordPos += tokenize(chunk).length;
+        }
       }
     }
-    return { title, author, cover, text: fullText.join('\n\n') };
+    return { title, author, cover, chapters, text: fullText.join('\n\n') };
   }
 
   let searchTimer = null;
@@ -1240,16 +1376,19 @@
   document.addEventListener('keydown', e => {
     if (/INPUT|TEXTAREA/.test(e.target.tagName) || document.querySelector('.overlay.show')) return;
     if (e.code === 'Space') { e.preventDefault(); playing ? stop() : play(); }
-    else if (e.key === 'ArrowLeft') els.backBtn.click();
-    else if (e.key === 'ArrowRight') els.fwdBtn.click();
+    else if (e.key === 'ArrowLeft') (e.shiftKey ? els.backBtn : els.prevBtn).click();
+    else if (e.key === 'ArrowRight') (e.shiftKey ? els.fwdBtn : els.nextBtn).click();
   });
 
   applySettingsToUI();
   renderBookList();
+  // App always opens on the library. The last book loads quietly behind it, so "Done" drops you right back in.
+  els.libraryOverlay.classList.add('show');
   const lib = getLibrary();
   if (lib.length) {
     const last = lsGet('rsvp_last_book', null);
-    openBook(lib.some(b => b.id === last) ? last : lib[lib.length - 1].id);
+    openBook(lib.some(b => b.id === last) ? last : lib[lib.length - 1].id, { stay: true, quiet: true })
+      .then(renderBookList);
   } else {
     currentBookText = "Upload an EPUB or paste text from the library icon in the top left to get started.";
     words = tokenize(currentBookText);

@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any app file so phones pick up the update.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const FILES = ['./', 'index.html', 'jszip.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
