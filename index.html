@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tempo Reader</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -37,7 +37,17 @@
     height: 100%; margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     overflow: hidden;
+    touch-action: manipulation;          /* no double-tap-to-zoom; taps register instantly */
+    -webkit-text-size-adjust: 100%;
   }
+  /* buttons & controls: no zoom, no text-selection or callout menu on fast/long presses */
+  button, .icon-btn, .card, .ch-row, .result-row, .stage, .stage-outer, label, .pill {
+    touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .book-content, .bv-word { touch-action: pan-y; }
   body {
     display: flex; flex-direction: column;
     padding-top: env(safe-area-inset-top, 0px);
@@ -164,11 +174,11 @@
   .book-actions button { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 12px; }
   .book-actions button.danger { color: var(--accent); }
   .empty-lib { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 10px; }
-  textarea#pasteArea { width: 100%; min-height: 90px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 10px 12px; font-size: 13.5px; font-family: inherit; margin-top: 6px; }
+  textarea#pasteArea { width: 100%; min-height: 90px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 10px 12px; font-size: 16px; font-family: inherit; margin-top: 6px; }
   .save-paste-btn { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); font-size: 13px; }
   .note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
 
-  #searchInput { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+  #searchInput { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 16px; margin-bottom: 12px; }
   .result-row { padding: 10px 4px; border-top: 1px solid var(--border); font-size: 13px; cursor: pointer; }
   .result-row:first-of-type { border-top: none; }
   .result-row b { color: var(--accent); }
@@ -1350,6 +1360,18 @@
   });
 
   window.addEventListener('resize', () => renderWord());
+
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 350 && !e.target.closest('input, textarea, .book-content')) {
+      e.preventDefault();            // stop the zoom...
+      const t = e.target.closest('button, [data-open], .ch-row, .result-row, .stage-outer');
+      if (t) t.click();              // ...but still count it as a real tap
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+  document.addEventListener('gesturestart', e => e.preventDefault());
 
   // Sliders: grab anywhere on the track and drag, even inside the scrolling settings sheet.
   // (By default the browser treats the first touch as a possible scroll and only the thumb is draggable.)
