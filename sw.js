@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any app file so phones pick up the update.
-const VERSION = 'v6';
+const VERSION = 'v7';
 const FILES = ['./', 'index.html', 'config.js', 'supabase.js', 'jszip.min.js', 'manifest.webmanifest',
                'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 

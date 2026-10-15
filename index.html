@@ -234,7 +234,10 @@
   .sheet.tall .book-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .book-content { font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.75; color: var(--text); padding-bottom: 30px; }
   .book-content p { margin: 0 0 1em; }
-  .bv-word { cursor: pointer; border-radius: 3px; padding: 1px 0; }
+  .bv-word { cursor: pointer; border-radius: 3px; padding: 1px 0; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .bv-word.bm { box-shadow: inset 0 -3px 0 #f5c542; }
+  .bv-word.bm::before { content: ""; display: inline-block; width: 7px; height: 11px; margin-right: 3px; vertical-align: 1px;
+    background: #f5c542; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); }
   .bv-word:active { background: var(--panel2); }
   .bv-word.current { background: var(--accent); color: #fff; padding: 1px 4px; }
   .stage { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -333,6 +336,45 @@
 
   .bv-hint { font-size: 11.5px; color: var(--muted); margin: -6px 0 14px; }
 
+  .toast.act { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
+  .toast.act button { background: none; border: none; color: var(--accent); font-weight: 700; font-size: 13px; padding: 2px 0; }
+
+  /* contents sheet tabs */
+  .seg { display: flex; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 3px; margin: -4px 0 12px; }
+  .seg button { flex: 1; border: none; background: none; color: var(--muted); font-size: 13.5px; font-weight: 600; padding: 9px; border-radius: 9px; }
+  .seg button.on { background: var(--panel2); color: var(--text); }
+
+  /* bookmark list */
+  .bm-row { padding: 12px 4px; border-top: 1px solid var(--border); cursor: pointer; }
+  .bm-row:first-child { border-top: none; }
+  .bm-row:active { opacity: .6; }
+  .bm-top { display: flex; gap: 10px; align-items: flex-start; }
+  .bm-flag { flex: none; width: 10px; height: 15px; margin-top: 3px; background: #f5c542; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); }
+  .bm-body { flex: 1; min-width: 0; }
+  .bm-snip { font-family: Georgia, serif; font-size: 14.5px; line-height: 1.45; }
+  .bm-meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .bm-acts { flex: none; display: flex; gap: 6px; }
+  .bm-acts button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 14px; }
+  .bm-acts button.del { color: var(--accent); }
+  .postit-chip { margin: 9px 0 0 20px; background: #fdeaa0; color: #3a3220; border-radius: 3px 3px 10px 3px; padding: 8px 10px;
+    font-size: 13px; line-height: 1.4; box-shadow: 0 2px 6px rgba(0,0,0,.18); white-space: pre-wrap; word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; transform: rotate(-.6deg); }
+
+  /* sticky-note editor */
+  .postit {
+    background: #fdeaa0; color: #3a3220; border-radius: 4px 4px 22px 4px; padding: 16px 16px 14px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.35), inset 0 -10px 18px rgba(0,0,0,.04); transform: rotate(-1deg); margin: 6px 4px 16px;
+  }
+  .postit .quote { font-family: Georgia, serif; font-size: 14px; line-height: 1.45; font-style: italic; opacity: .8; margin-bottom: 10px; }
+  .postit textarea {
+    width: 100%; min-height: 130px; border: none; resize: vertical; background:
+      repeating-linear-gradient(transparent 0 25px, rgba(58,50,32,.14) 25px 26px);
+    color: #2c2618; font-size: 16px; line-height: 26px; font-family: "Marker Felt", "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+    outline: none; padding: 0;
+  }
+  .postit textarea::placeholder { color: rgba(58,50,32,.45); }
+  .postit .where { font-size: 11.5px; opacity: .6; margin-top: 8px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
   .toast-wrap {
     position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); left: 0; right: 0;
     display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -359,7 +401,8 @@
     </div>
     <div class="top-title" id="bookTitle">No book loaded</div>
     <div class="top-right">
-      <button class="icon-btn" id="chaptersBtn" title="Chapters">☰</button>
+      <button class="icon-btn" id="bmBtn" title="Bookmark this spot">🔖</button>
+      <button class="icon-btn" id="chaptersBtn" title="Chapters &amp; bookmarks">☰</button>
       <button class="icon-btn" id="bookViewBtn" title="Book view">📖</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
     </div>
@@ -523,15 +566,32 @@
 
   <div class="overlay" id="chaptersOverlay">
     <div class="sheet">
-      <h2>Chapters <span class="close" data-close="chaptersOverlay">Done</span></h2>
+      <h2>Contents <span class="close" data-close="chaptersOverlay">Done</span></h2>
+      <div class="seg" id="navTabs"><button data-tab="ch" class="on">Chapters</button><button data-tab="bm">Bookmarks</button></div>
       <div id="chapterList"></div>
+      <div id="bmList" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="noteOverlay">
+    <div class="sheet">
+      <h2><span id="noteTitle">Note</span> <span class="close" id="noteDone">Save</span></h2>
+      <div class="postit">
+        <div class="quote" id="noteQuote"></div>
+        <textarea id="noteText" placeholder="Write a note…"></textarea>
+        <div class="where" id="noteWhere"></div>
+      </div>
+      <div class="acct-row">
+        <button id="noteJump">Go to this spot</button>
+        <button class="danger" id="noteDelete">Delete bookmark</button>
+      </div>
     </div>
   </div>
 
   <div class="overlay" id="bookViewOverlay">
     <div class="sheet tall">
       <h2>Book view <span class="close" data-close="bookViewOverlay">Done</span></h2>
-      <div class="bv-hint">Tap any word to jump back into speed-reading mode from there.</div>
+      <div class="bv-hint">Tap a word to resume speed reading from there · press and hold to bookmark it with a note.</div>
       <div class="book-content" id="bookViewContent"></div>
     </div>
   </div>
@@ -946,12 +1006,171 @@
     const curEl = els.chapterList.querySelector('.current');
     if (curEl) requestAnimationFrame(() => curEl.scrollIntoView({ block: 'center' }));
   }
+  let navTab = 'ch';
+  function showNavTab(t) {
+    navTab = t;
+    document.querySelectorAll('#navTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+    els.chapterList.style.display = t === 'ch' ? '' : 'none';
+    document.getElementById('bmList').style.display = t === 'bm' ? '' : 'none';
+    if (t === 'ch') renderChapters(); else renderBookmarkList();
+  }
+  document.getElementById('navTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showNavTab(b.dataset.tab); });
   els.chaptersBtn.addEventListener('click', () => {
     if (!words.length) return;
     stop();
-    renderChapters();
+    showNavTab(navTab);
     els.chaptersOverlay.classList.add('show');
   });
+
+  // ======================= BOOKMARKS + NOTES =======================
+  // Stored per book: rsvp_bm_<bookId> = [{id, word, snippet, chapter, note, createdAt, updatedAt, deleted}]
+  // Deleted ones are kept as hidden "tombstones" so the delete can sync to other devices.
+  function getBms(bookId) { return lsGet('rsvp_bm_' + bookId, []); }
+  function liveBms(bookId) { return getBms(bookId).filter(b => !b.deleted).sort((a, b) => a.word - b.word); }
+  function putBm(bookId, bm) {
+    const all = getBms(bookId);
+    const i = all.findIndex(x => x.id === bm.id);
+    if (i >= 0) all[i] = bm; else all.push(bm);
+    lsSet('rsvp_bm_' + bookId, all);
+    if (Sync) Sync.syncSoon();
+    onBookmarksChanged();
+  }
+  // Snap back to the start of the sentence: you notice something a beat after it flashes by.
+  function sentenceStart(w) {
+    let i = Math.max(0, Math.min(w, words.length - 1)), steps = 0;
+    while (i > 0 && steps < 40 && !/[.!?…]["'”’)\]]*$/.test(words[i - 1]) && !paraEnd[i - 1]) { i--; steps++; }
+    return steps >= 40 ? w : i;
+  }
+  function snippetFrom(w) {
+    const out = [];
+    for (let i = w; i < words.length && out.length < 16; i++) {
+      out.push(words[i].replace(/\u200B/g, ''));
+      if (out.length >= 5 && /[.!?…]["'”’)\]]*$/.test(words[i])) break;
+    }
+    const t = out.join(' ');
+    return out.length >= 16 ? t + '…' : t;
+  }
+  function addBookmarkAt(w, opts) {
+    opts = opts || {};
+    if (!currentBookId || !words.length) return null;
+    const exist = liveBms(currentBookId).find(b => Math.abs(b.word - w) <= 2);
+    if (exist) { if (opts.openNote) openNote(exist.id); else toast('Already bookmarked'); return exist; }
+    const now = Date.now();
+    const ci = chapterIndexAt(w);
+    const bm = { id: 'm' + now.toString(36) + Math.random().toString(36).slice(2, 7), word: w, snippet: snippetFrom(w),
+                 chapter: ci >= 0 ? currentChapters[ci].t : '', note: '', createdAt: now, updatedAt: now };
+    putBm(currentBookId, bm);
+    if (opts.openNote) openNote(bm.id);
+    else toastAction('🔖 Bookmarked', 'Add note', () => openNote(bm.id));
+    return bm;
+  }
+  function addBookmarkHere() { return addBookmarkAt(sentenceStart(currentWord())); }
+  els.bmBtn = document.getElementById('bmBtn');
+  els.bmBtn.addEventListener('click', addBookmarkHere);
+
+  function toastAction(msg, label, fn) {
+    const el = document.createElement('div');
+    el.className = 'toast act';
+    el.innerHTML = '<span></span><button></button>';
+    el.firstChild.textContent = msg; el.lastChild.textContent = label;
+    el.lastChild.addEventListener('click', () => { el.remove(); fn(); });
+    toastWrap.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 4000);
+  }
+
+  function renderBookmarkList() {
+    const list = document.getElementById('bmList');
+    const bms = currentBookId ? liveBms(currentBookId) : [];
+    if (!bms.length) {
+      list.innerHTML = '<div class="empty-lib">No bookmarks yet.<br>Tap 🔖 while reading, or press and hold the word.<br>In book view, press and hold any word.</div>';
+      return;
+    }
+    list.innerHTML = bms.map(b => `
+      <div class="bm-row" data-id="${b.id}">
+        <div class="bm-top">
+          <span class="bm-flag"></span>
+          <div class="bm-body">
+            <div class="bm-snip">“${escapeHtml(b.snippet)}”</div>
+            <div class="bm-meta">${b.chapter ? escapeHtml(b.chapter) + ' · ' : ''}${words.length ? Math.round(b.word / words.length * 100) : 0}% · ${new Date(b.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+          </div>
+          <div class="bm-acts">
+            <button data-act="note" aria-label="Note">✎</button>
+            <button class="del" data-act="del" aria-label="Delete">✕</button>
+          </div>
+        </div>
+        ${b.note ? `<div class="postit-chip">${escapeHtml(b.note)}</div>` : ''}
+      </div>`).join('');
+  }
+  document.getElementById('bmList').addEventListener('click', e => {
+    const row = e.target.closest('.bm-row'); if (!row) return;
+    const id = row.dataset.id, act = e.target.closest('[data-act]');
+    if (act && act.dataset.act === 'del') { deleteBm(currentBookId, id); return; }
+    if (act && act.dataset.act === 'note') { openNote(id); return; }
+    const bm = liveBms(currentBookId).find(b => b.id === id); if (!bm) return;
+    jumpToWord(bm.word); canRewind = false; saveBookmark();
+    els.chaptersOverlay.classList.remove('show');
+    toast('🔖 ' + (bm.note ? bm.note.split('\n')[0].slice(0, 60) : 'Jumped to bookmark'));
+  });
+  function deleteBm(bookId, id) {
+    const bm = getBms(bookId).find(b => b.id === id); if (!bm) return;
+    putBm(bookId, Object.assign({}, bm, { deleted: true, updatedAt: Date.now() }));
+    toastAction('Bookmark deleted', 'Undo', () => {
+      const cur = getBms(bookId).find(b => b.id === id);
+      if (cur) putBm(bookId, Object.assign({}, cur, { deleted: false, updatedAt: Date.now() }));
+    });
+  }
+
+  // ---- sticky-note editor ----
+  let noteBmId = null;
+  const noteEls = { ov: document.getElementById('noteOverlay'), text: document.getElementById('noteText'),
+    quote: document.getElementById('noteQuote'), where: document.getElementById('noteWhere'), title: document.getElementById('noteTitle') };
+  function openNote(id) {
+    const bm = currentBookId && getBms(currentBookId).find(b => b.id === id && !b.deleted);
+    if (!bm) return;
+    if (playing) stop();
+    noteBmId = id;
+    noteEls.title.textContent = bm.note ? 'Note' : 'Add a note';
+    noteEls.quote.textContent = '“' + bm.snippet + '”';
+    noteEls.text.value = bm.note || '';
+    noteEls.where.textContent = (bm.chapter ? bm.chapter + ' · ' : '') + (words.length ? Math.round(bm.word / words.length * 100) : 0) + '% · ' +
+      new Date(bm.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    noteEls.ov.classList.add('show');
+    setTimeout(() => noteEls.text.focus(), 250);
+  }
+  function saveNote() {
+    if (!noteBmId) return;
+    const bm = getBms(currentBookId).find(b => b.id === noteBmId);
+    const text = noteEls.text.value.replace(/\s+$/, '');
+    if (bm && (bm.note || '') !== text) { putBm(currentBookId, Object.assign({}, bm, { note: text, updatedAt: Date.now() })); toast('Note saved'); }
+    noteBmId = null;
+    noteEls.text.blur();
+    noteEls.ov.classList.remove('show');
+  }
+  document.getElementById('noteDone').addEventListener('click', saveNote);
+  noteEls.ov.addEventListener('click', e => { if (e.target === noteEls.ov) saveNote(); });   // tapping outside also saves
+  document.getElementById('noteJump').addEventListener('click', () => {
+    const bm = getBms(currentBookId).find(b => b.id === noteBmId); saveNote();
+    if (bm) { jumpToWord(bm.word); canRewind = false; saveBookmark(); [els.chaptersOverlay, els.bookViewOverlay].forEach(o => o.classList.remove('show')); }
+  });
+  document.getElementById('noteDelete').addEventListener('click', () => {
+    const id = noteBmId; noteBmId = null; noteEls.ov.classList.remove('show'); noteEls.text.blur();
+    deleteBm(currentBookId, id);
+  });
+
+  // keep every open view in step when bookmarks change (here or from another device)
+  function onBookmarksChanged() {
+    if (els.chaptersOverlay.classList.contains('show') && navTab === 'bm') renderBookmarkList();
+    if (els.bookViewOverlay.classList.contains('show')) markBookView();
+  }
+  function markBookView() {
+    els.bookViewContent.querySelectorAll('.bv-word.bm').forEach(s => s.classList.remove('bm'));
+    if (!currentBookId) return;
+    liveBms(currentBookId).forEach(b => {
+      const s = els.bookViewContent.querySelector('[data-wi="' + b.word + '"]');
+      if (s) { s.classList.add('bm'); s.dataset.bm = b.id; }
+    });
+  }
   els.chapterList.addEventListener('click', e => {
     const row = e.target.closest('.ch-row');
     if (!row) return;
@@ -982,7 +1201,22 @@
   els.accentColor.addEventListener('input', () => { settings.accent = els.accentColor.value; applyTheme(); persistSettings(); });
 
   // tap the word area to play/pause (the only visible control in Pitch black while reading)
-  document.querySelector('.stage-outer').addEventListener('click', () => playing ? stop() : play());
+  // tap = play/pause; press and hold = bookmark without stopping
+  (function () {
+    const stageEl = document.querySelector('.stage-outer');
+    let holdTimer = null, held = false, sx = 0, sy = 0;
+    stageEl.addEventListener('pointerdown', e => {
+      held = false; sx = e.clientX; sy = e.clientY;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => { held = true; addBookmarkHere(); }, 550);
+    });
+    const cancel = () => clearTimeout(holdTimer);
+    stageEl.addEventListener('pointerup', cancel);
+    stageEl.addEventListener('pointercancel', cancel);
+    stageEl.addEventListener('pointermove', e => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 12) cancel(); });
+    stageEl.addEventListener('contextmenu', e => e.preventDefault());
+    stageEl.addEventListener('click', () => { if (held) { held = false; return; } playing ? stop() : play(); });
+  })();
 
   let lastSave = 0;
   function saveBookmark() {
@@ -1077,7 +1311,7 @@
     idbDelete('cover_' + id);
     idbDelete('epub_' + id);
     delete coverCache[id];
-    try { localStorage.removeItem('rsvp_book_' + id); localStorage.removeItem('rsvp_bookmark_' + id); } catch(e) {}
+    try { localStorage.removeItem('rsvp_book_' + id); localStorage.removeItem('rsvp_bookmark_' + id); localStorage.removeItem('rsvp_bm_' + id); } catch(e) {}
     renderBookList();
     if (currentBookId === id) { stop(); currentBookId = null; currentBookText = ''; els.bookTitle.textContent = 'No book loaded'; words = []; chunks = []; idx = 0; renderWord(); }
   }
@@ -1515,6 +1749,7 @@
         bookViewCache = { text: currentBookText, html: buildBookViewHTML() };
       }
       els.bookViewContent.innerHTML = bookViewCache.html;
+      markBookView();
       const span = els.bookViewContent.querySelector('[data-wi="' + startWord + '"]');
       if (span) {
         span.classList.add('current');
@@ -1523,6 +1758,24 @@
     }, 50);   // gives the browser a frame to actually paint the spinner
   });
 
+  (function () {
+    let t = null, held = false, sx = 0, sy = 0;
+    els.bookViewContent.addEventListener('pointerdown', e => {
+      const span = e.target.closest('.bv-word'); if (!span) return;
+      held = false; sx = e.clientX; sy = e.clientY; clearTimeout(t);
+      t = setTimeout(() => {
+        held = true;
+        if (span.dataset.bm && span.classList.contains('bm')) openNote(span.dataset.bm);
+        else { const bm = addBookmarkAt(parseInt(span.dataset.wi, 10), { openNote: true }); if (bm) markBookView(); }
+      }, 550);
+    });
+    const cancel = () => clearTimeout(t);
+    els.bookViewContent.addEventListener('pointerup', cancel);
+    els.bookViewContent.addEventListener('pointercancel', cancel);
+    els.bookViewContent.addEventListener('pointermove', e => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) cancel(); });
+    els.bookViewContent.addEventListener('contextmenu', e => e.preventDefault());
+    els.bookViewContent.addEventListener('click', e => { if (held) { held = false; e.stopImmediatePropagation(); } }, true);
+  })();
   els.bookViewContent.addEventListener('click', (e) => {
     const span = e.target.closest('.bv-word');
     if (!span) return;
@@ -1541,6 +1794,7 @@
     const $ = id => document.getElementById(id);
     const acctBtn = $('acctBtn');
     const api = { enabled, queueProgress() {}, syncSoon() {}, deleteRemote() {}, canDownload: () => false, fetchText: async () => '' };
+    let bmMissing = false;
     if (!enabled) return api;
 
     const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {
@@ -1573,7 +1827,8 @@
           state === 'syncing' ? (detail || 'Syncing…') :
           state === 'offline' ? 'Offline — changes will sync when you reconnect.' :
           state === 'error' ? 'Last sync failed: ' + detail :
-          n + ' book' + (n === 1 ? '' : 's') + ' backed up' + (lastSync ? ' · last synced ' + relTime(lastSync) : '');
+          n + ' book' + (n === 1 ? '' : 's') + ' backed up' + (lastSync ? ' · last synced ' + relTime(lastSync) : '') +
+          (bmMissing ? '. Bookmarks aren’t syncing yet: run supabase-bookmarks.sql in Supabase (one-time).' : '');
       }
     }
     function msg(t, err) { const m = $('acctMsg'); m.textContent = t || ''; m.classList.toggle('err', !!err); }
@@ -1693,6 +1948,37 @@
       if (a.error) throw a.error;
       const b = await sb.from('progress').delete().eq('book_id', id);
       if (b.error) throw b.error;
+      await sb.from('bookmarks').delete().eq('book_id', id);   // fine if the table isn't set up yet
+    }
+
+    // ---------- bookmarks: per-bookmark "newest edit wins"; deletes travel as tombstones ----------
+    async function syncBookmarks() {
+      const r = await sb.from('bookmarks').select('*');
+      if (r.error) { bmMissing = true; console.warn('bookmark sync unavailable', r.error); return; }
+      bmMissing = false;
+      const libIds = new Set(getLibrary().map(b => b.id));
+      const remote = new Map(r.data.map(x => [x.id, x]));
+      const cache = {}, changed = new Set();
+      const arr = id => cache[id] || (cache[id] = lsGet('rsvp_bm_' + id, []));
+      r.data.forEach(x => {
+        if (!libIds.has(x.book_id)) return;
+        const rt = Date.parse(x.updated_at) || 0, list = arr(x.book_id), i = list.findIndex(b => b.id === x.id);
+        const incoming = { id: x.id, word: x.word, snippet: x.snippet || '', chapter: x.chapter || '', note: x.note || '',
+                           createdAt: Date.parse(x.created_at) || rt, updatedAt: rt, deleted: !!x.deleted };
+        if (i < 0) { list.push(incoming); changed.add(x.book_id); }
+        else if (rt > (list[i].updatedAt || 0)) { list[i] = incoming; changed.add(x.book_id); }
+      });
+      changed.forEach(id => lsSet('rsvp_bm_' + id, cache[id]));
+      const up = [];
+      libIds.forEach(bid => lsGet('rsvp_bm_' + bid, []).forEach(b => {
+        const x = remote.get(b.id);
+        if (!x || (b.updatedAt || 0) > (Date.parse(x.updated_at) || 0)) up.push({
+          user_id: user.id, id: b.id, book_id: bid, word: b.word, snippet: b.snippet || '', chapter: b.chapter || '',
+          note: b.note || '', deleted: !!b.deleted,
+          created_at: new Date(b.createdAt || Date.now()).toISOString(), updated_at: new Date(b.updatedAt || Date.now()).toISOString() });
+      }));
+      if (up.length) { const e = await sb.from('bookmarks').upsert(up, { onConflict: 'user_id,id' }); if (e.error) console.warn(e.error); }
+      if (changed.size) onBookmarksChanged();
     }
 
     // ---------- reading positions ----------
@@ -1773,6 +2059,7 @@
             pending.set(b.id, { word: local.word, ts: local.updatedAt || Date.now() });
         });
         await flushProgress();
+        try { await syncBookmarks(); } catch (e) { console.warn('bookmark sync failed', e); }
         renderBookList();
 
         // 7) download covers + text for books from other devices, so they work offline too
@@ -1872,6 +2159,7 @@
   document.addEventListener('keydown', e => {
     if (/INPUT|TEXTAREA/.test(e.target.tagName) || document.querySelector('.overlay.show')) return;
     if (e.code === 'Space') { e.preventDefault(); playing ? stop() : play(); }
+    else if (e.key === 'b' || e.key === 'B') addBookmarkHere();
     else if (e.key === 'ArrowLeft') (e.shiftKey ? els.backBtn : els.prevBtn).click();
     else if (e.key === 'ArrowRight') (e.shiftKey ? els.fwdBtn : els.nextBtn).click();
   });
