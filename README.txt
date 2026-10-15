@@ -1,16 +1,18 @@
-TEMPO READER
+TEMPO READER — files in this folder
 
-FIRST-TIME SETUP (laptop)
-1. github.com -> Sign up
-2. + (top right) -> New repository -> name "tempo-reader" -> Public -> Create
-3. Click "uploading an existing file" -> drag in ALL the files from this folder (not the folder) -> Commit changes
-4. Settings -> Pages -> Branch: main, / (root) -> Save -> wait 1-2 min
-5. Your app: https://YOUR-USERNAME.github.io/tempo-reader/
+index.html            the app
+config.js             your Supabase URL + publishable key go here (edit it on GitHub)
+supabase.js           Supabase's library (don't edit)
+supabase-setup.sql    paste into Supabase SQL Editor once (sets up tables, storage, privacy rules)
+sw.js                 offline support (version number changes with each update)
+jszip.min.js          reads EPUB files
+manifest.webmanifest + icons   home-screen app icon/name
 
-INSTALL ON iPHONE
-Open the link in Safari -> Share -> Add to Home Screen
+UPDATING THE APP LATER
+Upload the new index.html and sw.js to GitHub (Add file -> Upload files -> Commit).
+Do NOT re-upload config.js, or you'll overwrite your keys with the blank one.
+On the phone: open Tempo, wait a few seconds, swipe it closed, reopen.
 
-UPDATING LATER
-Open the repo -> Add file -> Upload files -> drag in the new index.html and sw.js -> Commit changes.
-(sw.js carries a version number; a new one tells your phone to fetch the update.)
-On the phone: open the app, wait a few seconds, close it fully, open it again.
+IF SYNC STOPS WORKING AFTER A WEEK+ OF NOT READING
+Free Supabase projects pause after ~7 days without use. Log in at supabase.com,
+open the project, click "Resume project". Nothing is lost.

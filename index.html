@@ -13,6 +13,8 @@
 <meta name="apple-mobile-web-app-title" content="Tempo">
 <meta name="theme-color" content="#000000">
 <script src="jszip.min.js"></script>
+<script src="config.js"></script>
+<script src="supabase.js"></script>
 <style>
   :root {
     --bg: #0f1115;
@@ -274,6 +276,23 @@
   .ch-row.current .ch-num { color: var(--accent); }
   .ch-row.done .ch-title { color: var(--muted); }
 
+  /* ---- account / sync ---- */
+  #acctBtn { white-space: nowrap; }
+  #acctBtn.ok { color: var(--text); }
+  #acctBtn.warn { border-color: var(--accent); color: var(--accent); }
+  .acct-field { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 16px; margin-bottom: 10px; font-family: inherit; }
+  .acct-row { display: flex; gap: 10px; margin-top: 4px; }
+  .acct-row button { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 14px; font-weight: 600; }
+  .acct-row button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .acct-row button.danger { color: var(--accent); }
+  .acct-row button:disabled { opacity: .5; }
+  .acct-msg { font-size: 13px; margin-top: 12px; min-height: 18px; line-height: 1.45; }
+  .acct-msg.err { color: var(--accent); }
+  .acct-who { font-size: 15px; margin-bottom: 4px; word-break: break-all; }
+  .cloud-tag { color: var(--muted); }
+
   .bv-hint { font-size: 11.5px; color: var(--muted); margin: -6px 0 14px; }
 
   .toast-wrap {
@@ -409,6 +428,7 @@
         <div class="lib-head">
           <h1>Library</h1>
           <div class="lib-head-btns">
+            <button class="pill-btn" id="acctBtn" style="display:none">☁ Sign in</button>
             <button class="pill-btn" id="editLibBtn">Edit</button>
             <button class="pill-btn" data-close="libraryOverlay">Done</button>
           </div>
@@ -426,6 +446,30 @@
         <div id="bookList"></div>
         <div class="note">Books are stored on this device only — nothing is uploaded anywhere.</div>
       </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="acctOverlay">
+    <div class="sheet">
+      <h2>Sync &amp; backup <span class="close" data-close="acctOverlay">Done</span></h2>
+      <div id="acctOut">
+        <div class="bv-hint" style="margin:0 0 14px">Sign in to back up your books and reading positions, and pick up on any device where you left off.</div>
+        <input class="acct-field" id="acctEmail" type="email" autocomplete="email" autocapitalize="off" placeholder="Email">
+        <input class="acct-field" id="acctPass" type="password" autocomplete="current-password" placeholder="Password (6+ characters)">
+        <div class="acct-row">
+          <button class="primary" id="signInBtn">Sign in</button>
+          <button id="signUpBtn">Create account</button>
+        </div>
+      </div>
+      <div id="acctIn" style="display:none">
+        <div class="acct-who">Signed in as <b id="acctWho"></b></div>
+        <div class="bv-hint" id="acctSummary" style="margin:0 0 14px"></div>
+        <div class="acct-row">
+          <button class="primary" id="syncNowBtn">Sync now</button>
+          <button class="danger" id="signOutBtn">Sign out</button>
+        </div>
+      </div>
+      <div class="acct-msg" id="acctMsg"></div>
     </div>
   </div>
 
@@ -461,6 +505,7 @@
   let timerId = null;
   let currentBookId = null;
   let currentBookText = '';
+  let Sync = null;   // set up near the end; stays null when cloud sync isn't configured
 
   const els = {};
   ['row','segLeft','segOrp','segRight','playBtn','backBtn','fwdBtn','wpm','wpmVal','wpmBadge',
@@ -844,9 +889,15 @@
   let lastSave = 0;
   function saveBookmark() {
     if (!currentBookId) return;
-    if (currentWord() === 0 && !lsGet('rsvp_bookmark_' + currentBookId, null)) return;
+    const w = currentWord();
+    const prev = lsGet('rsvp_bookmark_' + currentBookId, null);
+    if (!prev && w === 0) return;
+    // Only stamp a new time when you actually moved. Redraws (theme change, rotation…) must not
+    // make an old position look "newer" than progress synced from another device.
+    if (prev && prev.word === w) return;
     lastSave = Date.now();
-    lsSet('rsvp_bookmark_' + currentBookId, { word: currentWord(), updatedAt: lastSave });
+    lsSet('rsvp_bookmark_' + currentBookId, { word: w, updatedAt: lastSave });
+    if (Sync) Sync.queueProgress(currentBookId, w, lastSave);
   }
   function readBookmarkWord(bookId) {
     const bm = lsGet('rsvp_bookmark_' + bookId, null);
@@ -901,7 +952,15 @@
     let text = '';
     try { text = await idbGet(id) || ''; } catch (e) { console.error(e); }
     if (!text) text = lsGet('rsvp_book_' + id, '');
-    if (!text) { toast('Could not load this book — it may have been removed from storage.', true); return; }
+    if (!text && Sync && Sync.canDownload(meta)) {
+      toast('Downloading "' + meta.title + '"…');
+      try { text = await Sync.fetchText(id); } catch (e) { console.error(e); }
+    }
+    if (!text) {
+      toast(meta.downloaded === false ? 'This book is in your cloud library — connect to the internet to download it.'
+                                      : 'Could not load this book — it may have been removed from storage.', true);
+      return;
+    }
     stop();
     currentChapters = meta.chapters && meta.chapters.length ? meta.chapters : null;
     loadBookText(id, meta.title, text, opts.quiet);
@@ -909,10 +968,16 @@
   }
 
   function deleteBook(id) {
+    const meta = getLibrary().find(b => b.id === id);
+    deleteLocalBook(id);
+    if (Sync && meta && meta.synced) Sync.deleteRemote(id);
+  }
+  function deleteLocalBook(id) {
     let lib = getLibrary().filter(b => b.id !== id);
     saveLibrary(lib);
     idbDelete(id);
     idbDelete('cover_' + id);
+    idbDelete('epub_' + id);
     delete coverCache[id];
     try { localStorage.removeItem('rsvp_book_' + id); localStorage.removeItem('rsvp_bookmark_' + id); } catch(e) {}
     renderBookList();
@@ -949,9 +1014,10 @@
       const b = r.b;
       const minsLeft = Math.round(b.wordCount * (1 - r.pct / 100) / wpm);
       const timeLeft = minsLeft >= 60 ? Math.floor(minsLeft / 60) + 'h ' + (minsLeft % 60) + 'm' : minsLeft + 'm';
-      const meta = r.lastRead === 0 ? (b.author ? escapeHtml(b.author) : timeLeft + ' read')
+      let meta = r.lastRead === 0 ? (b.author ? escapeHtml(b.author) : timeLeft + ' read')
         : r.pct >= 99 ? 'Finished'
         : r.pct + '% · ' + timeLeft + ' left';
+      if (b.downloaded === false) meta = '<span class="cloud-tag">☁</span> ' + meta;
       const coverInner = coverCache[b.id] ? `<img src="${coverCache[b.id]}" alt="">` : placeholderCover(b);
       return `
       <div class="card" data-open="${b.id}" title="${escapeHtml(b.title)}${r.lastRead ? ' — last read ' + relTime(r.lastRead) : ''}">
@@ -1031,6 +1097,14 @@
     try {
       await idbPut(id, text);
       if (extra.cover) { try { await idbPut('cover_' + id, extra.cover); } catch (e) { extra.cover = null; } }
+      // keep the original file only until it's uploaded, so cloud backup has the real EPUB
+      if (extra.file && Sync && Sync.enabled) {
+        try {
+          const buf = extra.file.arrayBuffer ? await extra.file.arrayBuffer()
+            : await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(extra.file); });
+          await idbPut('epub_' + id, buf);           // raw bytes store reliably in every browser
+        } catch (e) {}
+      }
     } catch (e) {
       console.error(e);
       toast('Could not save "' + title + '": ' + (e && e.message ? e.message : 'storage error'), true);
@@ -1048,6 +1122,7 @@
       toast('Added "' + title + '" (' + wc.toLocaleString() + ' words) to your library.');
     }
     renderBookList();
+    if (ok && Sync) Sync.syncSoon();
     return id;
   }
 
@@ -1066,14 +1141,14 @@
       try {
         els.uploadBtn.textContent = 'Parsing ' + file.name + '...';
         const { title, author, cover, chapters, text } = await parseEpub(file);
-        const newId = await addBookToLibrary(title || file.name.replace(/\.epub$/i,''), text, 'epub', { author, cover, chapters });
+        const newId = await addBookToLibrary(title || file.name.replace(/\.epub$/i,''), text, 'epub', { author, cover, chapters, file });
         if (newId && files.length === 1) await openBook(newId);
       } catch (err) {
         console.error(err);
         toast('Could not parse "' + file.name + '": ' + err.message, true);
       }
     }
-    els.uploadBtn.textContent = '＋ Upload EPUB (any number of files)';
+    els.uploadBtn.textContent = '＋ Add EPUBs';
     els.fileInput.value = '';
   });
 
@@ -1358,6 +1433,307 @@
     saveBookmark();
     els.bookViewOverlay.classList.remove('show');
   });
+
+  // ======================= CLOUD SYNC (Supabase) =======================
+  // Local storage stays the source the app reads from, so everything works offline.
+  // When signed in, the cloud keeps a copy of every book + your reading position.
+  Sync = (() => {
+    const cfg = window.TEMPO_CONFIG || {};
+    const enabled = !!(cfg.supabaseUrl && cfg.supabaseKey && window.supabase && window.supabase.createClient);
+    const $ = id => document.getElementById(id);
+    const acctBtn = $('acctBtn');
+    const api = { enabled, queueProgress() {}, syncSoon() {}, deleteRemote() {}, canDownload: () => false, fetchText: async () => '' };
+    if (!enabled) return api;
+
+    const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'tempo-auth' }
+    });
+    const BUCKET = 'books';
+    let user = null, syncing = false, again = false, lastSync = lsGet('rsvp_last_sync', 0);
+    let state = 'out', detail = '', soonTimer = null;
+    const pending = new Map();                              // bookId -> {word, ts}
+    let pendingDeletes = lsGet('rsvp_pending_deletes', []);
+    const path = (id, ext) => user.id + '/' + id + '.' + ext;
+    const online = () => navigator.onLine !== false;
+
+    // ---------- UI ----------
+    function setState(st, d) { state = st; detail = d || ''; paint(); }
+    function paint() {
+      acctBtn.style.display = '';
+      acctBtn.classList.remove('ok', 'warn');
+      if (!user) acctBtn.textContent = '☁ Sign in';
+      else if (state === 'syncing') acctBtn.textContent = '☁ Syncing…';
+      else if (state === 'offline') acctBtn.textContent = '☁ Offline';
+      else if (state === 'error') { acctBtn.textContent = '☁ Sync issue'; acctBtn.classList.add('warn'); }
+      else { acctBtn.textContent = '☁ Synced'; acctBtn.classList.add('ok'); }
+      $('acctOut').style.display = user ? 'none' : '';
+      $('acctIn').style.display = user ? '' : 'none';
+      if (user) {
+        $('acctWho').textContent = user.email || 'you';
+        const n = getLibrary().length;
+        $('acctSummary').textContent =
+          state === 'syncing' ? (detail || 'Syncing…') :
+          state === 'offline' ? 'Offline — changes will sync when you reconnect.' :
+          state === 'error' ? 'Last sync failed: ' + detail :
+          n + ' book' + (n === 1 ? '' : 's') + ' backed up' + (lastSync ? ' · last synced ' + relTime(lastSync) : '');
+      }
+    }
+    function msg(t, err) { const m = $('acctMsg'); m.textContent = t || ''; m.classList.toggle('err', !!err); }
+    function busy(on) { ['signInBtn', 'signUpBtn', 'syncNowBtn', 'signOutBtn'].forEach(i => $(i).disabled = on); }
+
+    acctBtn.addEventListener('click', () => { msg(''); paint(); $('acctOverlay').classList.add('show'); });
+    $('signInBtn').addEventListener('click', () => auth('in'));
+    $('signUpBtn').addEventListener('click', () => auth('up'));
+    $('syncNowBtn').addEventListener('click', () => { msg(''); syncNow(true); });
+    $('signOutBtn').addEventListener('click', async () => {
+      busy(true); await flushProgress();
+      await sb.auth.signOut().catch(() => {});
+      forgetSyncFlags(); user = null; busy(false);
+      msg('Signed out. Your books stay on this device.'); paint();
+    });
+
+    async function auth(mode) {
+      const email = $('acctEmail').value.trim(), password = $('acctPass').value;
+      if (!email || password.length < 6) { msg('Enter your email and a password of at least 6 characters.', true); return; }
+      busy(true); msg(mode === 'in' ? 'Signing in…' : 'Creating account…');
+      try {
+        const res = mode === 'in' ? await sb.auth.signInWithPassword({ email, password })
+                                  : await sb.auth.signUp({ email, password });
+        if (res.error) throw res.error;
+        if (!res.data.session) { msg('Account created. Check your email for a confirmation link, then come back and sign in.'); return; }
+        $('acctPass').value = '';
+        await adopt(res.data.session.user);
+        msg('Signed in. Backing up your library…');
+        await syncNow(true);
+        msg('');
+      } catch (e) {
+        msg(friendly(e), true);
+      } finally { busy(false); }
+    }
+    function friendly(e) {
+      const m = (e && e.message) || String(e);
+      if (/invalid login/i.test(m)) return 'Wrong email or password.';
+      if (/not confirmed/i.test(m)) return 'Confirm your email first (check your inbox), then sign in.';
+      if (/signups? not allowed|signup is disabled/i.test(m)) return 'New sign-ups are turned off for this app.';
+      if (/failed to fetch|network/i.test(m)) return 'Can’t reach the server. Check your connection.';
+      return m;
+    }
+
+    // A different account than last time? Don't treat its library as "deleted elsewhere".
+    async function adopt(u) {
+      const prev = lsGet('rsvp_sync_user', null);
+      if (prev && prev !== u.id) forgetSyncFlags();
+      lsSet('rsvp_sync_user', u.id);
+      user = u; paint();
+    }
+    function forgetSyncFlags() {
+      const lib = getLibrary();
+      lib.forEach(b => { delete b.synced; });
+      saveLibrary(lib);
+      pendingDeletes = []; lsSet('rsvp_pending_deletes', pendingDeletes);
+      pending.clear();
+      lsSet('rsvp_sync_user', null);
+    }
+
+    // ---------- helpers ----------
+    async function put(p, blob, type) {
+      const { error } = await sb.storage.from(BUCKET).upload(p, blob, { upsert: true, contentType: type });
+      if (error) throw error;
+    }
+    async function get(p) {
+      const { data, error } = await sb.storage.from(BUCKET).download(p);
+      if (error) throw error;
+      return data;
+    }
+    function dataUrlToBlob(u) {
+      const [head, b64] = u.split(',');
+      const bin = atob(b64), arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' });
+    }
+    function blobToDataUrl(b) {
+      return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+    }
+    function patchMeta(id, fields) {
+      const lib = getLibrary(); const b = lib.find(x => x.id === id);
+      if (b) { Object.assign(b, fields); saveLibrary(lib); }
+    }
+
+    // ---------- books ----------
+    async function uploadBook(b) {
+      const text = await idbGet(b.id);
+      if (!text) return;                                   // nothing local to back up
+      await put(path(b.id, 'txt'), new Blob([text], { type: 'text/plain;charset=utf-8' }), 'text/plain;charset=utf-8');
+      if (b.hasCover) { const c = await idbGet('cover_' + b.id); if (c) await put(path(b.id, 'jpg'), dataUrlToBlob(c), 'image/jpeg'); }
+      let hasEpub = !!b.hasEpub;
+      const epub = await idbGet('epub_' + b.id);
+      if (epub) { await put(path(b.id, 'epub'), new Blob([epub], { type: 'application/epub+zip' }), 'application/epub+zip'); hasEpub = true; }
+      const { error } = await sb.from('books').upsert({
+        user_id: user.id, id: b.id, title: b.title, author: b.author || '', word_count: b.wordCount || 0,
+        type: b.type || 'epub', chapters: b.chapters || null, has_cover: !!b.hasCover, has_epub: hasEpub,
+        added_at: new Date(b.addedAt || Date.now()).toISOString()
+      }, { onConflict: 'user_id,id' });
+      if (error) throw error;
+      patchMeta(b.id, { synced: true, hasEpub });
+      if (epub) idbDelete('epub_' + b.id);                 // backed up — free the space on the phone
+    }
+    async function fetchText(id) {
+      const blob = await get(path(id, 'txt'));
+      const text = await blob.text();
+      await idbPut(id, text);
+      patchMeta(id, { downloaded: true });
+      return text;
+    }
+    async function fetchCover(id) {
+      const url = await blobToDataUrl(await get(path(id, 'jpg')));
+      await idbPut('cover_' + id, url);
+      coverCache[id] = url;
+    }
+    async function removeRemote(id) {
+      await sb.storage.from(BUCKET).remove([path(id, 'txt'), path(id, 'jpg'), path(id, 'epub')]);
+      const a = await sb.from('books').delete().eq('id', id);
+      if (a.error) throw a.error;
+      const b = await sb.from('progress').delete().eq('book_id', id);
+      if (b.error) throw b.error;
+    }
+
+    // ---------- reading positions ----------
+    function queueProgress(id, word, ts) {
+      pending.set(id, { word, ts });
+      if (!playing) { clearTimeout(soonTimer); soonTimer = setTimeout(flushProgress, 1500); }
+    }
+    async function flushProgress() {
+      if (!user || !pending.size || !online()) return;
+      const batch = Array.from(pending.entries());
+      const rows = batch.map(([id, v]) => ({ user_id: user.id, book_id: id, word: v.word, updated_at: new Date(v.ts).toISOString() }));
+      const { error } = await sb.from('progress').upsert(rows, { onConflict: 'user_id,book_id' });
+      if (error) { console.warn('progress sync failed', error); return; }
+      batch.forEach(([id, v]) => { const cur = pending.get(id); if (cur && cur.ts === v.ts) pending.delete(id); });
+    }
+    function applyRemoteProgress(id, word, ts) {
+      lsSet('rsvp_bookmark_' + id, { word, updatedAt: ts });
+      if (id === currentBookId && !playing && word !== currentWord()) {
+        jumpToWord(word); canRewind = word > 0;
+        toast('Picked up your place from another device');
+      }
+    }
+
+    // ---------- the main sync ----------
+    async function syncNow(manual) {
+      if (!user) return;
+      if (!online()) { setState('offline'); return; }
+      if (syncing) { again = true; return; }
+      syncing = true; setState('syncing');
+      try {
+        // 1) finish deletes made while offline
+        for (const id of pendingDeletes.slice()) {
+          await removeRemote(id);
+          pendingDeletes = pendingDeletes.filter(x => x !== id); lsSet('rsvp_pending_deletes', pendingDeletes);
+        }
+        // 2) what's in the cloud
+        const rb = await sb.from('books').select('*');      if (rb.error) throw rb.error;
+        const rp = await sb.from('progress').select('*');   if (rp.error) throw rp.error;
+        const remote = new Map(rb.data.map(r => [r.id, r]));
+        let lib = getLibrary();
+
+        // 3) books deleted on another device (safety: never wipe everything because the cloud came back empty)
+        if (remote.size > 0) {
+          lib.filter(b => b.synced && !remote.has(b.id)).forEach(b => deleteLocalBook(b.id));
+          lib = getLibrary();
+        }
+        // 4) books added on another device -> show them here (text downloads below)
+        let added = 0;
+        rb.data.forEach(r => {
+          const local = lib.find(b => b.id === r.id);
+          if (!local) {
+            lib.push({ id: r.id, title: r.title, author: r.author, hasCover: r.has_cover, hasEpub: r.has_epub,
+                       chapters: r.chapters, wordCount: r.word_count, type: r.type,
+                       addedAt: Date.parse(r.added_at) || Date.now(), synced: true, downloaded: false });
+            added++;
+          } else if (!local.synced) { local.synced = true; }   // already in the cloud (e.g. signed back in)
+        });
+        saveLibrary(lib);
+
+        // 5) back up books that only exist on this device
+        const todo = getLibrary().filter(b => !b.synced);
+        for (let i = 0; i < todo.length; i++) {
+          setState('syncing', 'Backing up ' + (i + 1) + ' of ' + todo.length + ': ' + todo[i].title);
+          await uploadBook(todo[i]);
+        }
+
+        // 6) reading positions: newest wins
+        const remoteProg = new Map(rp.data.map(p => [p.book_id, p]));
+        remoteProg.forEach((p, id) => {
+          const local = lsGet('rsvp_bookmark_' + id, null);
+          const rt = Date.parse(p.updated_at) || 0;
+          if (!local || rt > (local.updatedAt || 0)) applyRemoteProgress(id, p.word, rt);
+        });
+        getLibrary().forEach(b => {
+          const local = lsGet('rsvp_bookmark_' + b.id, null);
+          const r = remoteProg.get(b.id);
+          if (local && typeof local.word === 'number' && (!r || (local.updatedAt || 0) > (Date.parse(r.updated_at) || 0)))
+            pending.set(b.id, { word: local.word, ts: local.updatedAt || Date.now() });
+        });
+        await flushProgress();
+        renderBookList();
+
+        // 7) download covers + text for books from other devices, so they work offline too
+        const need = getLibrary().filter(b => b.synced && (b.downloaded === false || (b.hasCover && !coverCache[b.id])));
+        for (let i = 0; i < need.length; i++) {
+          const b = need[i];
+          setState('syncing', 'Downloading ' + (i + 1) + ' of ' + need.length + ': ' + b.title);
+          if (b.hasCover && !coverCache[b.id] && !(await idbGet('cover_' + b.id))) { try { await fetchCover(b.id); } catch (e) { console.warn(e); } }
+          if (b.downloaded === false) { try { await fetchText(b.id); } catch (e) { console.warn(e); } }
+        }
+
+        lastSync = Date.now(); lsSet('rsvp_last_sync', lastSync);
+        setState('ok');
+        if (added && !manual) toast(added + ' book' + (added === 1 ? '' : 's') + ' synced from your other devices');
+        renderBookList();
+      } catch (e) {
+        console.warn('sync failed', e);
+        setState(online() ? 'error' : 'offline', friendly(e));
+      } finally {
+        syncing = false;
+        if (again) { again = false; setTimeout(syncNow, 500); }
+      }
+    }
+    function syncSoon() { clearTimeout(api._t); api._t = setTimeout(syncNow, 1500); }
+    function deleteRemote(id) {
+      pendingDeletes.push(id); lsSet('rsvp_pending_deletes', pendingDeletes);
+      pending.delete(id);
+      syncSoon();
+    }
+
+    // ---------- start ----------
+    (async () => {
+      paint();
+      try {
+        const { data } = await sb.auth.getSession();
+        if (data && data.session) { await adopt(data.session.user); syncNow(); }
+        else paint();
+      } catch (e) { console.warn(e); paint(); }
+      sb.auth.onAuthStateChange((ev, session) => {
+        if (ev === 'SIGNED_OUT') { user = null; paint(); }
+        else if (session && session.user && (!user || user.id !== session.user.id)) setTimeout(() => adopt(session.user), 0);
+      });
+    })();
+    setInterval(() => { if (user) flushProgress(); }, 10000);
+    document.addEventListener('visibilitychange', () => {
+      if (!user) return;
+      if (document.hidden) flushProgress();
+      else if (Date.now() - lastSync > 20000) syncNow();
+    });
+    window.addEventListener('online', () => { if (user) syncNow(); });
+    window.addEventListener('offline', () => { if (user) setState('offline'); });
+
+    Object.assign(api, {
+      queueProgress, syncSoon, deleteRemote, fetchText, syncNow, flushProgress,
+      canDownload: meta => !!(user && meta && meta.synced && online()),
+      _debug: () => ({ user, state, pending: Array.from(pending.entries()), pendingDeletes })
+    });
+    return api;
+  })();
 
   window.addEventListener('resize', () => renderWord());
 
