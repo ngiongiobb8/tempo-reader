@@ -144,9 +144,47 @@
   .sheet h2 .close { font-size: 13px; color: var(--muted); font-weight: 400; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; background: var(--panel); }
 
   .control { margin-bottom: 14px; }
-  .control label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
-  .control label span.val { color: var(--text); font-variant-numeric: tabular-nums; }
-  input[type="range"] { width: 100%; height: 30px; accent-color: var(--accent); touch-action: none; }
+  .control label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .control label span.val { color: var(--text); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums;
+    background: var(--panel2); border-radius: 999px; padding: 3px 10px; }
+  /* chunky sliders: thick track that fills with the accent color, big thumb */
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 38px; margin: 0;
+    background: transparent; touch-action: none; cursor: pointer; --pct: 50%;
+  }
+  input[type="range"]:focus { outline: none; }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 10px; border-radius: 999px;
+    background: linear-gradient(to right, var(--accent) 0 var(--pct), var(--panel2) var(--pct) 100%);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -9px;
+    border-radius: 50%; background: #fff; border: 3px solid var(--accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,.35); transition: transform .12s ease;
+  }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.18); }
+  input[type="range"]::-moz-range-track { height: 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border); }
+  input[type="range"]::-moz-range-progress { height: 10px; border-radius: 999px; background: var(--accent); }
+  input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+
+  /* each setting sits on its own card */
+  #settingsOverlay .control { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px 6px; margin-bottom: 10px; }
+  #settingsOverlay .toggle-row { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  #settingsOverlay .toggle-row:first-of-type { border-top: 1px solid var(--border); }
+
+  /* save bar */
+  .save-bar {
+    position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom, 0px)); margin: 14px -18px calc(-24px - env(safe-area-inset-bottom, 0px));
+    padding: 12px 18px calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--border);
+  }
+  .save-bar button {
+    width: 100%; padding: 14px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted); font-size: 15px; font-weight: 700; transition: background .15s, color .15s;
+  }
+  .save-bar button.dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .save-bar.nudge button.dirty { animation: nudge .35s ease 2; }
+  @keyframes nudge { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
   .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--border); }
   .toggle-row:first-of-type { border-top: none; }
   .switch { position: relative; width: 40px; height: 24px; flex: none; }
@@ -361,10 +399,10 @@
 
   <div class="overlay" id="settingsOverlay">
     <div class="sheet">
-      <h2>Settings <span class="close" data-close="settingsOverlay">Done</span></h2>
+      <h2>Settings <span class="close" id="cancelSettingsBtn">Cancel</span></h2>
 
       <div class="control">
-        <label>Speed <span class="val" id="wpmVal">350</span> wpm</label>
+        <label>Speed <span class="val"><span id="wpmVal">350</span> wpm</span></label>
         <input type="range" id="wpm" min="100" max="900" step="10" value="350">
       </div>
       <div class="control">
@@ -372,7 +410,7 @@
         <input type="range" id="chunk" min="1" max="4" step="1" value="1">
       </div>
       <div class="control">
-        <label>Font size <span class="val" id="fontVal">44</span>px</label>
+        <label>Font size <span class="val"><span id="fontVal">44</span> px</span></label>
         <input type="range" id="fontSize" min="22" max="84" step="2" value="44">
       </div>
       <div class="control">
@@ -419,6 +457,8 @@
           <label>Accent <input type="color" id="accentColor" value="#ff5555"></label>
         </div>
       </div>
+
+      <div class="save-bar" id="saveBar"><button id="saveSettingsBtn">No changes</button></div>
     </div>
   </div>
 
@@ -607,6 +647,7 @@
     els.rampToggle.checked = settings.ramp;
     els.bgColor.value = settings.bg; els.textColor.value = settings.text; els.accentColor.value = settings.accent;
     applyTheme();
+    document.querySelectorAll('input[type="range"]').forEach(updateFill);
   }
 
   const THEMES = {
@@ -637,12 +678,59 @@
     renderWord && chunks && renderWord();
   }
 
-  function persistSettings() { lsSet('rsvp_settings', settings); }
+  // While the settings sheet is open, changes preview live but aren't saved until "Save changes".
+  let settingsOpen = false, settingsSnapshot = null;
+  function persistSettings() {
+    if (settingsOpen) { updateSettingsDirty(); return; }
+    lsSet('rsvp_settings', settings);
+  }
+  function settingsDirty() { return settingsOpen && JSON.stringify(settings) !== settingsSnapshot; }
+  function updateSettingsDirty() {
+    const b = document.getElementById('saveSettingsBtn');
+    const d = settingsDirty();
+    b.classList.toggle('dirty', d);
+    b.textContent = d ? 'Save changes' : 'No changes';
+  }
+  function openSettings() {
+    if (playing) stop();
+    settingsSnapshot = JSON.stringify(settings);
+    settingsOpen = true;
+    updateSettingsDirty();
+    document.querySelectorAll('#settingsOverlay input[type="range"]').forEach(updateFill);
+    els.settingsOverlay.classList.add('show');
+  }
+  function closeSettings(save) {
+    if (save) {
+      settingsOpen = false;
+      lsSet('rsvp_settings', settings);
+      toast('Settings saved');
+    } else if (settingsDirty()) {
+      const prevChunk = settings.chunk;
+      settings = JSON.parse(settingsSnapshot);
+      settingsOpen = false;
+      applySettingsToUI();
+      if (settings.chunk !== prevChunk) { const wi = currentWord(); buildChunksFromWords(wi); }
+      renderWord();
+      toast('Changes discarded');
+    }
+    settingsOpen = false;
+    els.settingsOverlay.classList.remove('show');
+  }
+  // filled part of each slider follows the thumb
+  function updateFill(r) {
+    const min = +r.min || 0, max = +r.max || 100;
+    r.style.setProperty('--pct', ((r.value - min) / (max - min) * 100) + '%');
+  }
+  document.addEventListener('input', e => { if (e.target.matches && e.target.matches('input[type="range"]')) updateFill(e.target); });
 
   document.querySelectorAll('[data-close]').forEach(el => {
     el.addEventListener('click', () => document.getElementById(el.dataset.close).classList.remove('show'));
   });
-  els.settingsBtn.addEventListener('click', () => els.settingsOverlay.classList.add('show'));
+  els.settingsBtn.addEventListener('click', openSettings);
+  document.getElementById('cancelSettingsBtn').addEventListener('click', () => closeSettings(false));
+  document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+    if (settingsDirty()) closeSettings(true); else closeSettings(false);
+  });
   els.libraryBtn.addEventListener('click', () => { resetLibEdit(); renderBookList(); els.libraryOverlay.classList.add('show'); });
   els.searchBtn.addEventListener('click', () => {
     els.searchInput.value = ''; els.searchResults.innerHTML = '';
@@ -650,7 +738,17 @@
     setTimeout(() => els.searchInput.focus(), 100);
   });
   document.querySelectorAll('.overlay').forEach(ov => {
-    ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('show'); });
+    ov.addEventListener('click', (e) => {
+      if (e.target !== ov) return;
+      if (ov.id === 'settingsOverlay') {
+        if (settingsDirty()) {                      // don't silently lose changes: point at the Save button
+          const bar = document.getElementById('saveBar');
+          bar.classList.remove('nudge'); void bar.offsetWidth; bar.classList.add('nudge');
+        } else closeSettings(false);
+        return;
+      }
+      ov.classList.remove('show');
+    });
   });
 
   // \u200B marks a break we inserted after an em/en dash (so "dark—and" flashes as "dark—" then "and")
