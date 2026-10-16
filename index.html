@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tempo Reader</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=10">
+<link rel="icon" href="icon-192.png?v=10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -92,8 +92,18 @@
   .guide { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); opacity: 0.7; }
   .guide-top { top: 28%; }
   .guide-bottom { top: 72%; }
+  /* blink break: the word fades, a quiet cue, then reading resumes on its own */
+  .blink-veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; letter-spacing: .32em; text-transform: lowercase; color: var(--muted);
+    opacity: 0; pointer-events: none; transition: opacity .5s ease; }
+  .row { transition: opacity .5s ease; }
+  .stage.blinking .row { opacity: .06; }
+  .stage.blinking .blink-veil { opacity: 1; }
+  .stage.blinking .center-mark { opacity: 0; }
+
+  /* fixation line sits on the red letter, ~35% across (Spritz-style), not dead center */
   .center-mark {
-    position: absolute; left: 50%; top: 10px; bottom: 10px; width: 1px;
+    position: absolute; left: 35%; top: 10px; bottom: 10px; width: 1px;
     background: var(--accent); opacity: 0.2;
   }
   .row {
@@ -103,10 +113,12 @@
     font-weight: 600;
     padding: 0 10px;
   }
-  .seg-left { flex: 1 1 0; text-align: right; white-space: pre; overflow: hidden; }
+  .seg-left { flex: 35 1 0; text-align: right; white-space: pre; overflow: hidden; }
   .seg-orp { flex: 0 0 auto; text-align: center; white-space: pre; }
   .seg-orp.hl { color: var(--accent); }
-  .seg-right { flex: 1 1 0; text-align: left; white-space: pre; overflow: hidden; }
+  .seg-right { flex: 65 1 0; text-align: left; white-space: pre; overflow: hidden; }
+  /* several words per flash (or highlight off): plain centered text */
+  .row.plain .seg-left, .row.plain .seg-right { flex: 1 1 0; }
 
   .bottom {
     flex: none; padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
@@ -467,6 +479,7 @@
       <div class="guide guide-top"></div>
       <div class="guide guide-bottom"></div>
       <div class="center-mark"></div>
+      <div class="blink-veil" aria-hidden="true">blink</div>
       <div class="row" id="row">
         <span class="seg-left" id="segLeft"></span><span class="seg-orp" id="segOrp"></span><span class="seg-right" id="segRight"></span>
       </div>
@@ -506,7 +519,7 @@
         <input type="range" id="fontSize" min="22" max="84" step="2" value="44">
       </div>
       <div class="control">
-        <label>Slow down on punctuation <span class="val" id="punctVal">1.6x</span></label>
+        <label>Pause at sentence ends <span class="val" id="punctVal">1.6x</span></label>
         <input type="range" id="punctMult" min="10" max="30" step="1" value="16">
       </div>
 
@@ -525,12 +538,20 @@
         <label class="switch"><input type="checkbox" id="longToggle" checked><span class="pill"></span></label>
       </div>
       <div class="control" style="margin-top:12px">
-        <label>Rewind when resuming <span class="val" id="rewindVal">4 words</span></label>
-        <input type="range" id="rewind" min="0" max="10" step="1" value="4">
+        <label>Rewind when resuming <span class="val" id="rewindVal">off</span></label>
+        <input type="range" id="rewind" min="0" max="10" step="1" value="0">
       </div>
       <div class="toggle-row">
         <span>Ease into speed when resuming</span>
         <label class="switch"><input type="checkbox" id="rampToggle" checked><span class="pill"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span>Blink breaks</span>
+        <label class="switch"><input type="checkbox" id="blinkToggle"><span class="pill"></span></label>
+      </div>
+      <div class="control" id="blinkEveryCtl">
+        <label>A short pause every <span class="val" id="blinkVal">5 min</span></label>
+        <input type="range" id="blinkEvery" min="2" max="15" step="1" value="5">
       </div>
 
       <div class="control" style="margin-top:14px;">
@@ -655,7 +676,7 @@
 
   const els = {};
   ['row','segLeft','segOrp','segRight','playBtn','backBtn','fwdBtn','wpm','wpmVal','wpmBadge',
-   'chunk','chunkVal','fontSize','fontVal','punctMult','punctVal','orpToggle','progressBar','paraMult','paraVal','longToggle','rewind','rewindVal','rampToggle',
+   'chunk','chunkVal','fontSize','fontVal','punctMult','punctVal','orpToggle','progressBar','paraMult','paraVal','longToggle','rewind','rewindVal','rampToggle','blinkToggle','blinkEvery','blinkVal',
    'wordCount','timeLeft','bookTitle','settingsBtn','settingsOverlay','libraryBtn','libraryOverlay',
    'fileInput','uploadBtn','pasteArea','savePasteBtn','bookList',
    'searchInput','searchResults','bgColor','textColor',
@@ -736,11 +757,17 @@
   function getLibrary() { return lsGet('rsvp_library', []); }
   function saveLibrary(lib) { return lsSet('rsvp_library', lib); }
 
+  const savedSettings = lsGet('rsvp_settings', null);
   let settings = Object.assign({
     wpm: 250, chunk: 1, font: 44, punct: 16, orp: true,
-    para: 25, longWords: true, rewind: 4, ramp: true,
-    theme: 'dark', bg: '#0f1115', text: '#e8e9ed', accent: '#ff5555'
-  }, lsGet('rsvp_settings', {}));
+    para: 25, longWords: true, rewind: 0, ramp: true, blink: false, blinkMin: 5,
+    theme: 'dark', bg: '#0f1115', text: '#e8e9ed', accent: '#ff5555', v: 2
+  }, savedSettings || {});
+  // one-time: v2 made "rewind when resuming" and "blink breaks" off by default — apply that to saved settings too
+  if (savedSettings && !(savedSettings.v >= 2)) {
+    settings.rewind = 0; settings.blink = false; settings.v = 2;
+    lsSet('rsvp_settings', settings);
+  }
 
   function rewindLabel(n) { return n == 0 ? 'off' : n + (n == 1 ? ' word' : ' words'); }
 
@@ -754,6 +781,9 @@
     els.longToggle.checked = settings.longWords;
     els.rewind.value = settings.rewind; els.rewindVal.textContent = rewindLabel(settings.rewind);
     els.rampToggle.checked = settings.ramp;
+    els.blinkToggle.checked = settings.blink;
+    els.blinkEvery.value = settings.blinkMin; els.blinkVal.textContent = settings.blinkMin + ' min';
+    document.getElementById('blinkEveryCtl').style.display = settings.blink ? '' : 'none';
     els.bgColor.value = settings.bg; els.textColor.value = settings.text; els.accentColor.value = settings.accent;
     applyTheme();
     document.querySelectorAll('input[type="range"]').forEach(updateFill);
@@ -861,13 +891,44 @@
   // paraEnd[i] = 1 when word i is the last word of a paragraph
   let paraEnd = new Uint8Array(0);
   function splitParagraphs(text) { return text.split(/\s*\n\s*/).map(p => p.trim()).filter(Boolean); }
+  // Per-word punctuation map, built once per book:
+  //   sentLen[i] > 0  -> word i ends a sentence of that many words
+  //   clauseEnd[i]    -> word i ends with a comma / semicolon / colon / dash
+  let sentLen = new Uint16Array(0), clauseEnd = new Uint8Array(0);
+  const ABBREV = /^(mr|mrs|ms|dr|st|jr|sr|vs|etc|prof|mt|no|inc|ltd|co|ft|gen|col|lt|sgt|capt|rev|fig|vol|approx|e\.g|i\.e|a\.m|p\.m|u\.s)\.$/i;
+  function isSentenceEnd(w) {
+    if (!/[.!?…]["'”’)\]]*$/.test(w)) return false;
+    const bare = w.replace(/^["'“‘(\[]+|["'”’)\]]+$/g, '');
+    if (ABBREV.test(bare)) return false;                 // "Mr." "e.g." aren't sentence ends
+    if (/^[A-Z]\.$/.test(bare)) return false;            // initials: "J. R. R."
+    return true;
+  }
   function buildParaEnds(text) {
     paraEnd = new Uint8Array(words.length);
+    sentLen = new Uint16Array(words.length);
+    clauseEnd = new Uint8Array(words.length);
     let wi = 0;
     for (const p of splitParagraphs(text)) {
       wi += tokenize(p).length;
       if (wi > 0 && wi <= words.length) paraEnd[wi - 1] = 1;
     }
+    let run = 0;
+    for (let i = 0; i < words.length; i++) {
+      run++;
+      const w = words[i];
+      if (isSentenceEnd(w) || paraEnd[i]) { sentLen[i] = Math.min(run, 65535); run = 0; }
+      else if (/[,;:—–]["'”’)\]]*$/.test(w)) clauseEnd[i] = 1;
+    }
+  }
+  // Extra time AFTER word i, in "word lengths".
+  // Sentence ends get the full pause, longer for long sentences (more to take in); commas get half.
+  function pauseAfter(i) {
+    const p = settings.punct / 10 - 1;
+    const s = sentLen[i] ? p * (sentLen[i] <= 7 ? 1 : sentLen[i] <= 22 ? 1.5 : 2) : 0;
+    if (paraEnd[i]) return Math.max(settings.para / 10 - 1, s);
+    if (s) return s;
+    if (clauseEnd[i]) return p * 0.5;
+    return 0;
   }
 
   function chunkSize() { return parseInt(els.chunk.value, 10) || 1; }
@@ -902,16 +963,31 @@
     return charRatio;
   }
 
-  // Shrink the font for this word only if its longer half wouldn't fit beside the fixed center
-  function fitFont(leftLen, orpLen, rightLen, centered) {
+  // The red letter is pinned ANCHOR of the way across. Research on where the eye recognises a word
+  // fastest (just left of a word's middle) means words run much further right of that letter than left,
+  // so a left-of-centre anchor (like Spritz) wastes less space and long words rarely need shrinking.
+  const ANCHOR = 0.35;
+  // Shrink the font for this word only if one side wouldn't fit beside the anchor
+  function fitFont(leftLen, orpLen, rightLen, anchored) {
     const base = parseInt(els.fontSize.value, 10);
     const avail = els.row.clientWidth - 24;               // minus row padding + breathing room
     const cw = base * getCharRatio();
-    let needed;
-    if (centered) needed = (Math.max(leftLen, rightLen) * 2 + orpLen) * cw;  // ORP pinned to middle
-    else needed = (leftLen + orpLen + rightLen) * cw;
-    const scale = needed > avail ? avail / needed : 1;
-    els.row.style.fontSize = Math.max(12, Math.floor(base * scale)) + 'px';
+    let scale = 1;
+    if (anchored) {
+      if (leftLen)  scale = Math.min(scale, ANCHOR * avail / (leftLen * cw + ANCHOR * orpLen * cw));
+      if (rightLen) scale = Math.min(scale, (1 - ANCHOR) * avail / (rightLen * cw + (1 - ANCHOR) * orpLen * cw));
+    } else {
+      const needed = (leftLen + orpLen + rightLen) * cw;
+      if (needed > avail) scale = avail / needed;
+    }
+    els.row.style.fontSize = Math.max(12, Math.floor(base * Math.min(1, scale))) + 'px';
+  }
+  // keep the faint fixation line exactly on the red letter
+  const centerMark = document.querySelector('.center-mark');
+  function placeMark() {
+    const o = els.segOrp;
+    if (!o.offsetWidth) return;
+    centerMark.style.left = (els.row.offsetLeft + o.offsetLeft + o.offsetWidth / 2) + 'px';
   }
 
   function renderWord() {
@@ -932,9 +1008,12 @@
       els.segOrp.textContent = w[i] || '';
       els.segOrp.classList.add('hl');
       els.segRight.textContent = w.slice(i + 1);
+      els.row.classList.remove('plain');
       fitFont(i, 1, Math.max(w.length - i - 1, 0), true);
+      placeMark();
     } else {
       const t = cw.join(' ');
+      els.row.classList.add('plain');
       els.segLeft.textContent = '';
       els.segOrp.textContent = t;
       els.segOrp.classList.remove('hl');
@@ -969,11 +1048,10 @@
       }
       ms += t;
     });
-    // pause after the chunk: paragraph break beats punctuation
-    const last = chunk.startWord + chunk.w.length - 1;
-    const anyParaEnd = chunk.w.some((_, j) => paraEnd[chunk.startWord + j]);
-    if (anyParaEnd || paraEnd[last]) ms += perWord * (settings.para / 10 - 1);
-    else if (chunk.w.some(w => /[.,;:!?)"”’]$/.test(w) && /[.,;:!?]/.test(w))) ms += perWord * (parseInt(els.punctMult.value, 10) / 10 - 1);
+    // pause after the chunk: the biggest break inside it (paragraph > sentence > comma)
+    let extra = 0;
+    for (let j = 0; j < chunk.w.length; j++) extra = Math.max(extra, pauseAfter(chunk.startWord + j));
+    ms += perWord * extra;
 
     // ease in: start at 60% speed and reach full speed over ~2 seconds after resuming
     if (settings.ramp && rampStart) {
@@ -984,14 +1062,36 @@
   }
 
   // idx always points at the chunk currently on screen
+  // Blink breaks: RSVP roughly halves how often you blink (Benedetto et al. 2015), so every few minutes
+  // of continuous reading we pause briefly at the end of a sentence, then carry on automatically.
+  let playedMs = 0, lastTickAt = 0, stoppedAt = 0;
+  const stageEl = document.querySelector('.stage');
+  const BLINK_MS = 2600;
   function tick() {
     if (!playing) return;
     renderWord();
+    const now = performance.now();
+    if (lastTickAt) playedMs += now - lastTickAt;
+    lastTickAt = now;
     timerId = setTimeout(() => {
       if (idx >= chunks.length - 1) { stop(); toast('Finished!'); return; }
+      const c = chunks[idx], last = c.startWord + c.w.length - 1;
+      if (settings.blink && playedMs >= settings.blinkMin * 60000 && sentLen[last]) { blinkBreak(); return; }
       idx++;
       tick();
     }, delayForChunk(chunks[idx]));
+  }
+  function blinkBreak() {
+    playedMs = 0;
+    stageEl.classList.add('blinking');
+    timerId = setTimeout(() => {
+      stageEl.classList.remove('blinking');
+      if (!playing) return;
+      idx++;
+      rampStart = performance.now();   // ease back in
+      lastTickAt = 0;
+      tick();
+    }, BLINK_MS);
   }
 
   let wakeLock = null;
@@ -1016,12 +1116,16 @@
     }
     canRewind = false;
     rampStart = performance.now();
+    lastTickAt = 0;
+    if (stoppedAt && performance.now() - stoppedAt > 60000) playedMs = 0;   // a real break already happened
     playing = true; els.playBtn.innerHTML = ICON_PAUSE; els.playBtn.setAttribute('aria-label', 'Pause'); document.body.classList.add('playing');
     keepScreenOn(true);
     tick();
   }
   function stop() {
     if (timerId) clearTimeout(timerId); timerId = null;
+    stageEl.classList.remove('blinking');
+    if (playing) stoppedAt = performance.now();
     if (playing) canRewind = true;
     playing = false; els.playBtn.innerHTML = ICON_PLAY; els.playBtn.setAttribute('aria-label', 'Play'); document.body.classList.remove('playing');
     keepScreenOn(false);
@@ -1235,6 +1339,12 @@
   els.longToggle.addEventListener('change', () => { settings.longWords = els.longToggle.checked; persistSettings(); });
   els.rewind.addEventListener('input', () => { settings.rewind = parseInt(els.rewind.value,10); els.rewindVal.textContent = rewindLabel(settings.rewind); persistSettings(); });
   els.rampToggle.addEventListener('change', () => { settings.ramp = els.rampToggle.checked; persistSettings(); });
+  els.blinkToggle.addEventListener('change', () => {
+    settings.blink = els.blinkToggle.checked;
+    document.getElementById('blinkEveryCtl').style.display = settings.blink ? '' : 'none';
+    persistSettings();
+  });
+  els.blinkEvery.addEventListener('input', () => { settings.blinkMin = parseInt(els.blinkEvery.value, 10); els.blinkVal.textContent = settings.blinkMin + ' min'; persistSettings(); });
   els.orpToggle.addEventListener('change', () => { settings.orp = els.orpToggle.checked; renderWord(); persistSettings(); });
 
   themeBtns.forEach(b => b.addEventListener('click', () => { settings.theme = b.dataset.themeBtn; applyTheme(); persistSettings(); }));
