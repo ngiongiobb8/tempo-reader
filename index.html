@@ -429,6 +429,21 @@
   .bm-acts button { display: inline-flex; align-items: center; justify-content: center; background: transparent; }
   .search-field { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border);
     border-radius: 12px; padding: 0 12px; margin-bottom: 12px; color: var(--muted); }
+  .search-field #allBmSearch { flex: 1; width: auto; border: none; background: none; color: var(--text); font: inherit; font-size: 16px;
+    padding: 11px 0; margin: 0; outline: none; -webkit-appearance: none; appearance: none; }
+  #allBmSearch::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  #libTabs { margin: 0 0 16px; }
+  #noteOverlay { z-index: 60; }
+  .chips { display: flex; gap: 8px; margin: 0 0 6px; }
+  .chips button { border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 6px 13px; font-size: 13px; font-weight: 500; }
+  .chips button.on { color: var(--text); border-color: var(--text); }
+  .allbm-sum { font-size: 12.5px; color: var(--muted); margin: 10px 2px 2px; }
+  .bm-group { margin-top: 18px; }
+  .bm-ghead { display: flex; align-items: center; gap: 12px; padding: 4px 2px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .bm-gcover { width: 30px; height: 45px; border-radius: 3px; overflow: hidden; flex: none; background: var(--panel2); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .bm-gcover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bm-gtitle { font-size: 15px; font-weight: 600; line-height: 1.25; }
+  .bm-gmeta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
   .search-field #searchInput { flex: 1; width: auto; border: none; background: none; color: var(--text); font: inherit; font-size: 16px;
     padding: 11px 0; margin: 0; outline: none; border-radius: 0; -webkit-appearance: none; appearance: none; }
   #searchInput::-webkit-search-cancel-button, #searchInput::-webkit-search-decoration { -webkit-appearance: none; display: none; }
@@ -450,6 +465,40 @@
   .postit .where { font-family: inherit; }
   .bv-loading { font-family: inherit; }
   .toast { font-size: 13px; }
+
+  /* ============ settings: flat list + steppers ============ */
+  #settingsOverlay .sheet.set { padding: calc(6px + env(safe-area-inset-top, 0px)) 0 calc(36px + env(safe-area-inset-bottom, 0px)); }
+  .set-inner { max-width: 560px; margin: 0 auto; }
+  .set-head { position: sticky; top: calc(-6px - env(safe-area-inset-top, 0px)); z-index: 2; background: var(--bg);
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 10px 20px 8px; }
+  .set-title { font-size: 17px; font-weight: 600; }
+  .set-cancel, .set-save { background: none; border: none; font-size: 16px; padding: 8px 0; color: var(--muted); }
+  .set-cancel { justify-self: start; }
+  .set-save { justify-self: end; font-weight: 600; transition: color .15s; }
+  .set-save.dirty { color: var(--accent); }
+  .set-save.nudge { animation: nudge .3s ease 2; }
+  .set-grp { font-size: 13px; color: var(--muted); padding: 28px 20px 6px; }
+  .set-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 20px; font-size: 15.5px; }
+  .set-row + .set-row::before { content: ""; position: absolute; top: 0; left: 20px; right: 20px; height: 1px; background: var(--border); }
+  .set-l { flex: 1; min-width: 0; }
+  .set-v { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; white-space: nowrap; }
+  .pm { display: flex; flex: none; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+  .pm button { width: 40px; height: 32px; border: none; background: none; color: var(--text); display: flex; align-items: center;
+    justify-content: center; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  .pm button + button { border-left: 1px solid var(--border); }
+  .pm button:active { background: var(--panel2); }
+  .pm button:disabled { opacity: .28; }
+  .swatches { display: flex; justify-content: space-between; padding: 8px 20px 14px; }
+  .sw-opt { display: flex; flex-direction: column; align-items: center; gap: 7px; background: none; border: none; color: var(--muted);
+    font-size: 12px; width: 52px; padding: 0; }
+  .sw-dot { width: 38px; height: 38px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); }
+  .sw-opt.active { color: var(--text); }
+  .sw-opt.active .sw-dot { box-shadow: inset 0 0 0 1px rgba(128,128,128,.35), 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+  .set-row input[type="color"] { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border: none; padding: 0;
+    background: none; border-radius: 50%; cursor: pointer; }
+  .set-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+  .set-row input[type="color"]::-webkit-color-swatch { border: 1px solid var(--border); border-radius: 50%; }
+  .set-row input[type="color"]::-moz-color-swatch { border: 1px solid var(--border); border-radius: 50%; }
 </style>
 </head>
 <body>
@@ -502,77 +551,34 @@
     </div>
   </div>
 
-  <div class="overlay" id="settingsOverlay">
-    <div class="sheet">
-      <h2>Settings <span class="close" id="cancelSettingsBtn">Cancel</span></h2>
+  <div class="overlay full" id="settingsOverlay">
+    <div class="sheet set">
+     <div class="set-inner">
+      <div class="set-head"><button type="button" class="set-cancel" id="cancelSettingsBtn">Cancel</button><span class="set-title">Settings</span><button type="button" class="set-save" id="saveSettingsBtn">Save</button></div>
 
-      <div class="control">
-        <label>Speed <span class="val"><span id="wpmVal">350</span> wpm</span></label>
-        <input type="range" id="wpm" min="100" max="900" step="10" value="350">
-      </div>
-      <div class="control">
-        <label>Words per flash <span class="val" id="chunkVal">1</span></label>
-        <input type="range" id="chunk" min="1" max="4" step="1" value="1">
-      </div>
-      <div class="control">
-        <label>Font size <span class="val"><span id="fontVal">44</span> px</span></label>
-        <input type="range" id="fontSize" min="22" max="84" step="2" value="44">
-      </div>
-      <div class="control">
-        <label>Pause at sentence ends <span class="val" id="punctVal">1.6x</span></label>
-        <input type="range" id="punctMult" min="10" max="30" step="1" value="16">
-      </div>
+      <div class="set-grp">Reading</div>
+      <div class="set-row step-row"><span class="set-l">Speed</span><span class="set-v"><span id="wpmVal">250</span> wpm</span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease speed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase speed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="wpm" min="100" max="900" step="10" value="250" hidden></div>
+      <div class="set-row step-row"><span class="set-l">Words per flash</span><span class="set-v"><span id="chunkVal">1</span></span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease words per flash"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase words per flash"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="chunk" min="1" max="4" step="1" value="1" hidden></div>
+      <div class="set-row step-row"><span class="set-l">Font size</span><span class="set-v"><span id="fontVal">44</span> px</span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease font size"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase font size"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="fontSize" min="22" max="84" step="2" value="44" hidden></div>
+      <div class="set-row"><span class="set-l">Highlight center letter</span><label class="switch"><input type="checkbox" id="orpToggle" checked><span class="pill"></span></label></div>
 
-      <div class="toggle-row">
-        <span>Highlight center letter (ORP)</span>
-        <label class="switch"><input type="checkbox" id="orpToggle" checked><span class="pill"></span></label>
-      </div>
+      <div class="set-grp">Pacing</div>
+      <div class="set-row step-row"><span class="set-l">Sentence-end pause</span><span class="set-v"><span id="punctVal">1.6×</span></span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease sentence-end pause"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase sentence-end pause"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="punctMult" min="10" max="30" step="1" value="16" hidden></div>
+      <div class="set-row step-row"><span class="set-l">Paragraph pause</span><span class="set-v"><span id="paraVal">2.5×</span></span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease paragraph pause"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase paragraph pause"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="paraMult" min="10" max="40" step="1" value="25" hidden></div>
+      <div class="set-row"><span class="set-l">Extra time for long words</span><label class="switch"><input type="checkbox" id="longToggle" checked><span class="pill"></span></label></div>
+      <div class="set-row step-row"><span class="set-l">Rewind on resume</span><span class="set-v"><span id="rewindVal">Off</span></span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease rewind on resume"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase rewind on resume"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="rewind" min="0" max="10" step="1" value="0" hidden></div>
+      <div class="set-row"><span class="set-l">Ease into speed</span><label class="switch"><input type="checkbox" id="rampToggle" checked><span class="pill"></span></label></div>
+      <div class="set-row"><span class="set-l">Blink breaks</span><label class="switch"><input type="checkbox" id="blinkToggle"><span class="pill"></span></label></div>
+      <div class="set-row step-row" id="blinkEveryCtl"><span class="set-l">Break every</span><span class="set-v"><span id="blinkVal">5 min</span></span><div class="pm"><button type="button" data-d="-1" aria-label="Decrease break every"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" data-d="1" aria-label="Increase break every"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><input type="range" id="blinkEvery" min="2" max="15" step="1" value="5" hidden></div>
 
-      <div class="lib-section" style="margin:18px 0 10px">Pacing</div>
-      <div class="control">
-        <label>Pause at paragraph breaks <span class="val" id="paraVal">2.5x</span></label>
-        <input type="range" id="paraMult" min="10" max="40" step="1" value="25">
-      </div>
-      <div class="toggle-row">
-        <span>Extra time for long words</span>
-        <label class="switch"><input type="checkbox" id="longToggle" checked><span class="pill"></span></label>
-      </div>
-      <div class="control" style="margin-top:12px">
-        <label>Rewind when resuming <span class="val" id="rewindVal">off</span></label>
-        <input type="range" id="rewind" min="0" max="10" step="1" value="0">
-      </div>
-      <div class="toggle-row">
-        <span>Ease into speed when resuming</span>
-        <label class="switch"><input type="checkbox" id="rampToggle" checked><span class="pill"></span></label>
-      </div>
-      <div class="toggle-row">
-        <span>Blink breaks</span>
-        <label class="switch"><input type="checkbox" id="blinkToggle"><span class="pill"></span></label>
-      </div>
-      <div class="control" id="blinkEveryCtl">
-        <label>A short pause every <span class="val" id="blinkVal">5 min</span></label>
-        <input type="range" id="blinkEvery" min="2" max="15" step="1" value="5">
-      </div>
-
-      <div class="control" style="margin-top:14px;">
-        <label>Theme</label>
-        <div class="theme-row">
-          <button data-theme-btn="dark">Dark</button>
-          <button data-theme-btn="light">Light</button>
-          <button data-theme-btn="black">Pitch black</button>
-          <button data-theme-btn="sepia">Sepia</button>
-          <button data-theme-btn="midnight">Midnight</button>
-          <button data-theme-btn="custom">Custom</button>
-        </div>
-        <div class="color-row">
-          <label>Background <input type="color" id="bgColor" value="#0f1115"></label>
-          <label>Text <input type="color" id="textColor" value="#e8e9ed"></label>
-          <label>Accent <input type="color" id="accentColor" value="#ff5555"></label>
-        </div>
-      </div>
-
-      <div class="save-bar" id="saveBar"><button id="saveSettingsBtn">No changes</button></div>
+      <div class="set-grp">Look</div>
+      <div class="swatches"><button type="button" class="sw-opt" data-theme-btn="dark"><span class="sw-dot" style="background:#0f1115"></span>Dark</button><button type="button" class="sw-opt" data-theme-btn="light"><span class="sw-dot" style="background:#f4f5f7"></span>Light</button><button type="button" class="sw-opt" data-theme-btn="black"><span class="sw-dot" style="background:#000000"></span>Black</button><button type="button" class="sw-opt" data-theme-btn="sepia"><span class="sw-dot" style="background:#f4ecd8"></span>Sepia</button><button type="button" class="sw-opt" data-theme-btn="midnight"><span class="sw-dot" style="background:#0b1426"></span>Midnight</button><button type="button" class="sw-opt" data-theme-btn="custom"><span class="sw-dot" style="background:conic-gradient(#ff5555,#f5c542,#5ac8fa,#a78bfa,#ff5555)"></span>Custom</button></div>
+      <div class="set-row custom-only"><span class="set-l">Background</span><input type="color" id="bgColor" value="#0f1115"></div>
+      <div class="set-row custom-only"><span class="set-l">Text</span><input type="color" id="textColor" value="#e8e9ed"></div>
+      <div class="set-row"><span class="set-l">Accent color</span><input type="color" id="accentColor" value="#ff5555"></div>
+     </div>
     </div>
+  </div>
   </div>
 
   <div class="overlay full" id="libraryOverlay">
@@ -586,7 +592,9 @@
             <button class="pill-btn" data-close="libraryOverlay">Done</button>
           </div>
         </div>
+        <div class="seg" id="libTabs"><button data-lt="books" class="on">Books</button><button data-lt="bm">Bookmarks</button></div>
         <input type="file" id="fileInput" accept=".epub" multiple style="display:none">
+        <div id="libBooksPane">
         <div class="lib-add">
           <button class="upload-btn" id="uploadBtn"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Add EPUBs</span></button>
           <button class="pill-btn" id="pasteToggle">Paste text</button>
@@ -598,6 +606,12 @@
 
         <div id="bookList"></div>
         <div class="note">Books are stored on this device only — nothing is uploaded anywhere.</div>
+        </div>
+        <div id="libBmPane" style="display:none">
+          <div class="search-field"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="allBmSearch" placeholder="Search bookmarks and notes" autocomplete="off" autocapitalize="off"></div>
+          <div class="chips" id="allBmFilter"><button data-f="all" class="on">All</button><button data-f="notes">With notes</button></div>
+          <div id="allBmList"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -769,15 +783,15 @@
     lsSet('rsvp_settings', settings);
   }
 
-  function rewindLabel(n) { return n == 0 ? 'off' : n + (n == 1 ? ' word' : ' words'); }
+  function rewindLabel(n) { return n == 0 ? 'Off' : n + (n == 1 ? ' word' : ' words'); }
 
   function applySettingsToUI() {
     els.wpm.value = settings.wpm; els.wpmVal.textContent = settings.wpm; els.wpmBadge.textContent = settings.wpm + ' wpm';
     els.chunk.value = settings.chunk; els.chunkVal.textContent = settings.chunk;
     els.fontSize.value = settings.font; els.fontVal.textContent = settings.font;
-    els.punctMult.value = settings.punct; els.punctVal.textContent = (settings.punct/10).toFixed(1) + 'x';
+    els.punctMult.value = settings.punct; els.punctVal.textContent = (settings.punct/10).toFixed(1) + '×';
     els.orpToggle.checked = settings.orp;
-    els.paraMult.value = settings.para; els.paraVal.textContent = (settings.para/10).toFixed(1) + 'x';
+    els.paraMult.value = settings.para; els.paraVal.textContent = (settings.para/10).toFixed(1) + '×';
     els.longToggle.checked = settings.longWords;
     els.rewind.value = settings.rewind; els.rewindVal.textContent = rewindLabel(settings.rewind);
     els.rampToggle.checked = settings.ramp;
@@ -787,7 +801,36 @@
     els.bgColor.value = settings.bg; els.textColor.value = settings.text; els.accentColor.value = settings.accent;
     applyTheme();
     document.querySelectorAll('input[type="range"]').forEach(updateFill);
+    syncSteppers();
   }
+  // − / + steppers drive the (hidden) range inputs, so all the existing setting logic stays the same
+  function syncSteppers() {
+    document.querySelectorAll('#settingsOverlay .step-row').forEach(row => {
+      const r = row.querySelector('input[type="range"]'), [m, p] = row.querySelectorAll('.pm button');
+      m.disabled = +r.value <= +r.min; p.disabled = +r.value >= +r.max;
+    });
+  }
+  function stepRange(r, dir) {
+    const st = +r.step || 1, v = Math.min(+r.max, Math.max(+r.min, +r.value + dir * st));
+    if (String(v) !== r.value) { r.value = v; r.dispatchEvent(new Event('input', { bubbles: true })); }
+    syncSteppers();
+    return +r.value > +r.min && +r.value < +r.max;
+  }
+  (function () {
+    let hold = null, rep = null;
+    const end = () => { clearTimeout(hold); clearInterval(rep); hold = rep = null; };
+    document.querySelectorAll('#settingsOverlay .pm button').forEach(btn => {
+      const r = btn.closest('.step-row').querySelector('input[type="range"]'), dir = +btn.dataset.d;
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault(); end();
+        stepRange(r, dir);
+        hold = setTimeout(() => { rep = setInterval(() => { if (!stepRange(r, dir)) end(); }, 70); }, 420);   // press and hold to keep going
+      });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, end));
+      btn.addEventListener('click', e => { if (e.detail === 0 && e.isTrusted) stepRange(r, dir); });   // keyboard (Enter/Space)
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+    });
+  })();
 
   const THEMES = {
     dark:     { mode: 'dark',  bg: '#0f1115', panel: '#171a21', panel2: '#1e222b', text: '#e8e9ed', muted: '#8a8f9c', border: '#2a2e38' },
@@ -814,6 +857,7 @@
     root.setProperty('--accent', settings.accent || '#ff5555');
     document.body.classList.toggle('minimal', !!t.minimal);
     themeBtns.forEach(b => b.classList.toggle('active', b.dataset.themeBtn === settings.theme));
+    document.querySelectorAll('.custom-only').forEach(r => { r.style.display = settings.theme === 'custom' ? '' : 'none'; });
     renderWord && chunks && renderWord();
   }
 
@@ -825,17 +869,15 @@
   }
   function settingsDirty() { return settingsOpen && JSON.stringify(settings) !== settingsSnapshot; }
   function updateSettingsDirty() {
-    const b = document.getElementById('saveSettingsBtn');
     const d = settingsDirty();
-    b.classList.toggle('dirty', d);
-    b.textContent = d ? 'Save changes' : 'No changes';
+    document.getElementById('saveSettingsBtn').classList.toggle('dirty', d);
   }
   function openSettings() {
     if (playing) stop();
     settingsSnapshot = JSON.stringify(settings);
     settingsOpen = true;
     updateSettingsDirty();
-    document.querySelectorAll('#settingsOverlay input[type="range"]').forEach(updateFill);
+    syncSteppers();
     els.settingsOverlay.classList.add('show');
   }
   function closeSettings(save) {
@@ -870,14 +912,14 @@
   document.getElementById('saveSettingsBtn').addEventListener('click', () => {
     if (settingsDirty()) closeSettings(true); else closeSettings(false);
   });
-  els.libraryBtn.addEventListener('click', () => { resetLibEdit(); renderBookList(); els.libraryOverlay.classList.add('show'); });
+  els.libraryBtn.addEventListener('click', () => { resetLibEdit(); renderBookList(); showLibTab('books'); els.libraryOverlay.classList.add('show'); });
   document.querySelectorAll('.overlay').forEach(ov => {
     ov.addEventListener('click', (e) => {
       if (e.target !== ov) return;
       if (ov.id === 'settingsOverlay') {
         if (settingsDirty()) {                      // don't silently lose changes: point at the Save button
-          const bar = document.getElementById('saveBar');
-          bar.classList.remove('nudge'); void bar.offsetWidth; bar.classList.add('nudge');
+          const sb = document.getElementById('saveSettingsBtn');
+          sb.classList.remove('nudge'); void sb.offsetWidth; sb.classList.add('nudge');
         } else closeSettings(false);
         return;
       }
@@ -1273,27 +1315,34 @@
   }
 
   // ---- sticky-note editor ----
-  let noteBmId = null;
+  let noteBmId = null, noteBookId = null;
   const noteEls = { ov: document.getElementById('noteOverlay'), text: document.getElementById('noteText'),
     quote: document.getElementById('noteQuote'), where: document.getElementById('noteWhere'), title: document.getElementById('noteTitle') };
-  function openNote(id) {
-    const bm = currentBookId && getBms(currentBookId).find(b => b.id === id && !b.deleted);
+  function bookPct(bookId, word) {
+    if (bookId === currentBookId && words.length) return Math.round(word / words.length * 100);
+    const m = getLibrary().find(b => b.id === bookId);
+    return m && m.wordCount ? Math.min(100, Math.round(word / m.wordCount * 100)) : 0;
+  }
+  function openNote(id, bookId) {
+    bookId = bookId || currentBookId;
+    const bm = bookId && getBms(bookId).find(b => b.id === id && !b.deleted);
     if (!bm) return;
     if (playing) stop();
-    noteBmId = id;
+    noteBmId = id; noteBookId = bookId;
     noteEls.title.textContent = bm.note ? 'Note' : 'Add a note';
     noteEls.quote.textContent = '“' + bm.snippet + '”';
     noteEls.text.value = bm.note || '';
-    noteEls.where.textContent = (bm.chapter ? bm.chapter + ' · ' : '') + (words.length ? Math.round(bm.word / words.length * 100) : 0) + '% · ' +
+    const meta = bookId !== currentBookId ? getLibrary().find(b => b.id === bookId) : null;
+    noteEls.where.textContent = (meta ? meta.title + ' · ' : '') + (bm.chapter ? bm.chapter + ' · ' : '') + bookPct(bookId, bm.word) + '% · ' +
       new Date(bm.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     noteEls.ov.classList.add('show');
     setTimeout(() => noteEls.text.focus(), 250);
   }
   function saveNote() {
     if (!noteBmId) return;
-    const bm = getBms(currentBookId).find(b => b.id === noteBmId);
+    const bm = getBms(noteBookId).find(b => b.id === noteBmId);
     const text = noteEls.text.value.replace(/\s+$/, '');
-    if (bm && (bm.note || '') !== text) { putBm(currentBookId, Object.assign({}, bm, { note: text, updatedAt: Date.now() })); toast('Note saved'); }
+    if (bm && (bm.note || '') !== text) { putBm(noteBookId, Object.assign({}, bm, { note: text, updatedAt: Date.now() })); toast('Note saved'); }
     noteBmId = null;
     noteEls.text.blur();
     noteEls.ov.classList.remove('show');
@@ -1301,17 +1350,106 @@
   document.getElementById('noteDone').addEventListener('click', saveNote);
   noteEls.ov.addEventListener('click', e => { if (e.target === noteEls.ov) saveNote(); });   // tapping outside also saves
   document.getElementById('noteJump').addEventListener('click', () => {
-    const bm = getBms(currentBookId).find(b => b.id === noteBmId); saveNote();
-    if (bm) { jumpToWord(bm.word); canRewind = false; saveBookmark(); [els.chaptersOverlay, els.bookViewOverlay].forEach(o => o.classList.remove('show')); }
+    const bookId = noteBookId, bm = getBms(bookId).find(b => b.id === noteBmId); saveNote();
+    if (bm) goToBookmark(bookId, bm);
   });
   document.getElementById('noteDelete').addEventListener('click', () => {
-    const id = noteBmId; noteBmId = null; noteEls.ov.classList.remove('show'); noteEls.text.blur();
-    deleteBm(currentBookId, id);
+    const id = noteBmId, bookId = noteBookId; noteBmId = null; noteEls.ov.classList.remove('show'); noteEls.text.blur();
+    deleteBm(bookId, id);
   });
+
+  // open any book at a bookmark (switching books if needed)
+  async function goToBookmark(bookId, bm) {
+    if (bookId !== currentBookId) {
+      await openBook(bookId, { quiet: true });
+      if (currentBookId !== bookId) return;            // couldn't open (e.g. offline and not downloaded)
+    }
+    jumpToWord(bm.word); canRewind = false; saveBookmark();
+    [els.chaptersOverlay, els.bookViewOverlay, els.libraryOverlay].forEach(o => o.classList.remove('show'));
+    toast(bm.note ? bm.note.split('\n')[0].slice(0, 60) : 'Jumped to bookmark');
+  }
+
+  // ---------------- every bookmark, across all books (Library → Bookmarks) ----------------
+  let allBmFilter = 'all';
+  const allBmEls = { list: document.getElementById('allBmList'), q: document.getElementById('allBmSearch') };
+  function renderAllBookmarks() {
+    const q = allBmEls.q.value.trim().toLowerCase();
+    const lib = getLibrary().slice().sort((a, b) => {
+      const ra = (lsGet('rsvp_bookmark_' + a.id, null) || {}).updatedAt || 0, rb = (lsGet('rsvp_bookmark_' + b.id, null) || {}).updatedAt || 0;
+      return (rb - ra) || ((b.addedAt || 0) - (a.addedAt || 0));
+    });
+    let total = 0, notes = 0, shown = 0;
+    const groups = lib.map(b => {
+      const all = liveBms(b.id);
+      total += all.length; notes += all.filter(x => x.note).length;
+      const bms = all.filter(x => (allBmFilter !== 'notes' || x.note) &&
+        (!q || (x.snippet + ' ' + (x.note || '') + ' ' + (x.chapter || '') + ' ' + b.title).toLowerCase().includes(q)));
+      shown += bms.length;
+      return { b, bms };
+    }).filter(g => g.bms.length);
+    if (!total) {
+      allBmEls.list.innerHTML = '<div class="empty-lib">No bookmarks yet.<br>While reading, tap the bookmark icon or press and hold the word.</div>';
+      return;
+    }
+    const sum = '<div class="allbm-sum">' + total + ' bookmark' + (total === 1 ? '' : 's') + ' · ' + notes + ' with notes' +
+      (q || allBmFilter !== 'all' ? ' · showing ' + shown : '') + '</div>';
+    if (!groups.length) { allBmEls.list.innerHTML = sum + '<div class="empty-lib">No matches.</div>'; return; }
+    allBmEls.list.innerHTML = sum + groups.map(({ b, bms }) => `
+      <div class="bm-group">
+        <div class="bm-ghead" data-open="${b.id}">
+          <div class="bm-gcover">${coverCache[b.id] ? `<img src="${coverCache[b.id]}" alt="">` : placeholderCover(b).replace('<div class="t">', '<div class="t" style="display:none">').replace('<div class="a">', '<div class="a" style="display:none">')}</div>
+          <div><div class="bm-gtitle">${escapeHtml(b.title)}</div>
+            <div class="bm-gmeta">${bms.length} bookmark${bms.length === 1 ? '' : 's'}${b.author ? ' · ' + escapeHtml(b.author) : ''}</div></div>
+        </div>
+        ${bms.map(x => `
+        <div class="bm-row" data-book="${b.id}" data-id="${x.id}">
+          <div class="bm-top">
+            <span class="bm-flag"></span>
+            <div class="bm-body">
+              <div class="bm-snip">“${escapeHtml(x.snippet)}”</div>
+              <div class="bm-meta">${x.chapter ? escapeHtml(x.chapter) + ' · ' : ''}${bookPct(b.id, x.word)}% · ${new Date(x.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+            </div>
+            <div class="bm-acts">
+              <button data-act="note" aria-label="Note">${ICON.pencil}</button>
+              <button class="del" data-act="del" aria-label="Delete">${ICON.x}</button>
+            </div>
+          </div>
+          ${x.note ? `<div class="postit-chip">${escapeHtml(x.note)}</div>` : ''}
+        </div>`).join('')}
+      </div>`).join('');
+  }
+  allBmEls.list.addEventListener('click', e => {
+    const head = e.target.closest('.bm-ghead');
+    if (head) { e.stopPropagation(); openBook(head.dataset.open); return; }
+    const row = e.target.closest('.bm-row'); if (!row) return;
+    const bookId = row.dataset.book, id = row.dataset.id, act = e.target.closest('[data-act]');
+    if (act && act.dataset.act === 'del') { deleteBm(bookId, id); return; }
+    if (act && act.dataset.act === 'note') { openNote(id, bookId); return; }
+    const bm = liveBms(bookId).find(x => x.id === id);
+    if (bm) goToBookmark(bookId, bm);
+  });
+  allBmEls.q.addEventListener('input', renderAllBookmarks);
+  document.getElementById('allBmFilter').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    allBmFilter = b.dataset.f;
+    document.querySelectorAll('#allBmFilter button').forEach(x => x.classList.toggle('on', x === b));
+    renderAllBookmarks();
+  });
+  let libTab = 'books';
+  function showLibTab(t) {
+    libTab = t;
+    document.querySelectorAll('#libTabs button').forEach(b => b.classList.toggle('on', b.dataset.lt === t));
+    document.getElementById('libBooksPane').style.display = t === 'books' ? '' : 'none';
+    document.getElementById('libBmPane').style.display = t === 'bm' ? '' : 'none';
+    document.getElementById('editLibBtn').style.display = t === 'books' ? '' : 'none';
+    if (t === 'bm') renderAllBookmarks();
+  }
+  document.getElementById('libTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showLibTab(b.dataset.lt); });
 
   // keep every open view in step when bookmarks change (here or from another device)
   function onBookmarksChanged() {
     if (els.chaptersOverlay.classList.contains('show') && navTab === 'bm') renderBookmarkList();
+    if (els.libraryOverlay.classList.contains('show') && libTab === 'bm') renderAllBookmarks();
     if (els.bookViewOverlay.classList.contains('show')) markBookView();
   }
   function markBookView() {
@@ -1334,8 +1472,8 @@
   els.wpm.addEventListener('input', () => { settings.wpm = parseInt(els.wpm.value,10); els.wpmVal.textContent = settings.wpm; els.wpmBadge.textContent = settings.wpm + ' wpm'; updateStats(); persistSettings(); });
   els.chunk.addEventListener('input', () => { settings.chunk = parseInt(els.chunk.value,10); els.chunkVal.textContent = settings.chunk; const wi = currentWord(); stop(); buildChunksFromWords(wi); persistSettings(); });
   els.fontSize.addEventListener('input', () => { settings.font = parseInt(els.fontSize.value,10); els.fontVal.textContent = settings.font; renderWord(); persistSettings(); });
-  els.punctMult.addEventListener('input', () => { settings.punct = parseInt(els.punctMult.value,10); els.punctVal.textContent = (settings.punct/10).toFixed(1)+'x'; persistSettings(); });
-  els.paraMult.addEventListener('input', () => { settings.para = parseInt(els.paraMult.value,10); els.paraVal.textContent = (settings.para/10).toFixed(1)+'x'; persistSettings(); });
+  els.punctMult.addEventListener('input', () => { settings.punct = parseInt(els.punctMult.value,10); els.punctVal.textContent = (settings.punct/10).toFixed(1)+'×'; persistSettings(); });
+  els.paraMult.addEventListener('input', () => { settings.para = parseInt(els.paraMult.value,10); els.paraVal.textContent = (settings.para/10).toFixed(1)+'×'; persistSettings(); });
   els.longToggle.addEventListener('change', () => { settings.longWords = els.longToggle.checked; persistSettings(); });
   els.rewind.addEventListener('input', () => { settings.rewind = parseInt(els.rewind.value,10); els.rewindVal.textContent = rewindLabel(settings.rewind); persistSettings(); });
   els.rampToggle.addEventListener('change', () => { settings.ramp = els.rampToggle.checked; persistSettings(); });
@@ -2286,7 +2424,7 @@
     if (now - lastTouchEnd < 350 && !e.target.closest('input, textarea, .book-content')) {
       e.preventDefault();            // stop the zoom...
       const t = e.target.closest('button, [data-open], .ch-row, .result-row, .stage-outer');
-      if (t) t.click();              // ...but still count it as a real tap
+      if (t && !t.closest('.pm')) t.click();              // ...but still count it as a real tap
     }
     lastTouchEnd = now;
   }, { passive: false });
