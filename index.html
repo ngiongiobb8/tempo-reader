@@ -248,6 +248,20 @@
   .book-content p { margin: 0 0 1em; }
   .bv-word { cursor: pointer; border-radius: 3px; padding: 1px 0; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .bv-word.bm { box-shadow: inset 0 -3px 0 #f5c542; }
+  /* saved passages: soft yellow; the run joins across the spaces between words */
+  .bv-word.bmr { background: rgba(245,197,66,.24); box-shadow: none; }
+  .bv-word.bmr.join { box-shadow: .3em 0 0 rgba(245,197,66,.24); }
+  /* passage being selected right now */
+  .bv-word.sel { background: color-mix(in srgb, var(--accent) 34%, transparent); }
+  .bv-word.sel.join { box-shadow: .3em 0 0 color-mix(in srgb, var(--accent) 34%, transparent); }
+  .sel-bar { position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+    display: none; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 14px;
+    background: var(--panel2); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .sel-bar.show { display: flex; }
+  .sel-bar .info { flex: 1; font-size: 13px; color: var(--muted); }
+  .sel-bar button { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 600; }
+  .sel-bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sheet.tall { position: relative; }
   .bv-word.bm::before { content: ""; display: inline-block; width: 7px; height: 11px; margin-right: 3px; vertical-align: 1px;
     background: #f5c542; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); }
   .bv-word:active { background: var(--panel2); }
@@ -262,8 +276,11 @@
   /* ...and the controls fade away completely while reading */
   body.minimal.playing .topbar,
   body.minimal.playing .bottom,
-  body.minimal.playing .resume-banner { opacity: 0; pointer-events: none; }
-  body.minimal.playing { cursor: none; }
+  body.minimal.playing .resume-banner,
+  body.autohide.playing .topbar,
+  body.autohide.playing .bottom,
+  body.autohide.playing .resume-banner { opacity: 0; pointer-events: none; }
+  body.minimal.playing, body.autohide.playing { cursor: none; }
 
   .bv-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
     height: 100%; min-height: 200px; color: var(--muted); font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
@@ -460,7 +477,8 @@
   .bm-snip { font-family: inherit; font-size: 15px; line-height: 1.45; }
   .postit-chip { font-size: 13.5px; transform: none; border-radius: 4px 4px 12px 4px; }
   .postit { transform: none; border-radius: 6px 6px 22px 6px; }
-  .postit .quote { font-family: inherit; font-style: normal; font-size: 14px; line-height: 1.45; opacity: .7; }
+  .postit .quote { font-family: inherit; font-style: normal; font-size: 14px; line-height: 1.45; opacity: .7; max-height: 7.4em; overflow-y: auto; }
+  .bm-snip { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
   .postit textarea { font-family: inherit; font-size: 16px; line-height: 26px; }
   .postit .where { font-family: inherit; }
   .bv-loading { font-family: inherit; }
@@ -576,6 +594,7 @@
       <div class="set-row custom-only"><span class="set-l">Background</span><input type="color" id="bgColor" value="#0f1115"></div>
       <div class="set-row custom-only"><span class="set-l">Text</span><input type="color" id="textColor" value="#e8e9ed"></div>
       <div class="set-row"><span class="set-l">Accent color</span><input type="color" id="accentColor" value="#ff5555"></div>
+      <div class="set-row"><span class="set-l">Hide controls while reading</span><label class="switch"><input type="checkbox" id="hideUiToggle" checked><span class="pill"></span></label></div>
      </div>
     </div>
   </div>
@@ -672,8 +691,14 @@
   <div class="overlay" id="bookViewOverlay">
     <div class="sheet tall">
       <h2>Book view <span class="close" data-close="bookViewOverlay">Done</span></h2>
-      <div class="bv-hint">Tap a word to resume speed reading from there · press and hold to bookmark it with a note.</div>
+      <div class="bv-hint">Tap a word to resume speed reading from there. Press and hold to highlight a passage.</div>
       <div class="book-content" id="bookViewContent"></div>
+      <div class="sel-bar" id="selBar">
+        <span class="info" id="selInfo"></span>
+        <button type="button" id="selCancel">Cancel</button>
+        <button type="button" id="selNote">Add note</button>
+        <button type="button" class="primary" id="selSave">Bookmark</button>
+      </div>
     </div>
   </div>
 
@@ -774,7 +799,7 @@
   const savedSettings = lsGet('rsvp_settings', null);
   let settings = Object.assign({
     wpm: 250, chunk: 1, font: 44, punct: 16, orp: true,
-    para: 25, longWords: true, rewind: 0, ramp: true, blink: false, blinkMin: 5,
+    para: 25, longWords: true, rewind: 0, ramp: true, blink: false, blinkMin: 5, hideUi: true,
     theme: 'dark', bg: '#0f1115', text: '#e8e9ed', accent: '#ff5555', v: 2
   }, savedSettings || {});
   // one-time: v2 made "rewind when resuming" and "blink breaks" off by default — apply that to saved settings too
@@ -796,6 +821,8 @@
     els.rewind.value = settings.rewind; els.rewindVal.textContent = rewindLabel(settings.rewind);
     els.rampToggle.checked = settings.ramp;
     els.blinkToggle.checked = settings.blink;
+    document.getElementById('hideUiToggle').checked = settings.hideUi;
+    document.body.classList.toggle('autohide', !!settings.hideUi);
     els.blinkEvery.value = settings.blinkMin; els.blinkVal.textContent = settings.blinkMin + ' min';
     document.getElementById('blinkEveryCtl').style.display = settings.blink ? '' : 'none';
     els.bgColor.value = settings.bg; els.textColor.value = settings.text; els.accentColor.value = settings.accent;
@@ -1258,6 +1285,22 @@
     return bm;
   }
   function addBookmarkHere() { return addBookmarkAt(sentenceStart(currentWord())); }
+  function passageText(a, b) {
+    const t = words.slice(a, b + 1).join(' ').replace(/\u200B/g, '');
+    return t.length > 600 ? t.slice(0, 597).replace(/\s+\S*$/, '') + '…' : t;
+  }
+  function addPassageBookmark(a, b, opts) {
+    opts = opts || {};
+    if (!currentBookId || !words.length) return null;
+    if (a > b) [a, b] = [b, a];
+    if (a === b) return addBookmarkAt(a, opts);               // a single word: same as a normal bookmark
+    const now = Date.now(), ci = chapterIndexAt(a);
+    const bm = { id: 'm' + now.toString(36) + Math.random().toString(36).slice(2, 7), word: a, end: b, snippet: passageText(a, b),
+                 chapter: ci >= 0 ? currentChapters[ci].t : '', note: '', createdAt: now, updatedAt: now };
+    putBm(currentBookId, bm);
+    if (opts.openNote) openNote(bm.id); else toast('Passage bookmarked');
+    return bm;
+  }
   els.bmBtn = document.getElementById('bmBtn');
   els.bmBtn.addEventListener('click', addBookmarkHere);
 
@@ -1453,11 +1496,17 @@
     if (els.bookViewOverlay.classList.contains('show')) markBookView();
   }
   function markBookView() {
-    els.bookViewContent.querySelectorAll('.bv-word.bm').forEach(s => s.classList.remove('bm'));
+    els.bookViewContent.querySelectorAll('.bv-word.bm, .bv-word.bmr').forEach(s => { s.classList.remove('bm', 'bmr', 'join'); delete s.dataset.bm; });
     if (!currentBookId) return;
     liveBms(currentBookId).forEach(b => {
-      const s = els.bookViewContent.querySelector('[data-wi="' + b.word + '"]');
-      if (s) { s.classList.add('bm'); s.dataset.bm = b.id; }
+      const first = els.bookViewContent.querySelector('[data-wi="' + b.word + '"]');
+      if (first) { first.classList.add('bm'); first.dataset.bm = b.id; }
+      if (typeof b.end === 'number' && b.end > b.word) {
+        for (let i = b.word; i <= b.end; i++) {
+          const s = els.bookViewContent.querySelector('[data-wi="' + i + '"]');
+          if (s) { s.classList.add('bmr'); s.dataset.bm = b.id; if (i < b.end) s.classList.add('join'); }
+        }
+      }
     });
   }
   els.chapterList.addEventListener('click', e => {
@@ -1477,6 +1526,17 @@
   els.longToggle.addEventListener('change', () => { settings.longWords = els.longToggle.checked; persistSettings(); });
   els.rewind.addEventListener('input', () => { settings.rewind = parseInt(els.rewind.value,10); els.rewindVal.textContent = rewindLabel(settings.rewind); persistSettings(); });
   els.rampToggle.addEventListener('change', () => { settings.ramp = els.rampToggle.checked; persistSettings(); });
+  document.getElementById('hideUiToggle').addEventListener('change', e => {
+    settings.hideUi = e.target.checked; document.body.classList.toggle('autohide', settings.hideUi); persistSettings();
+  });
+  // while the controls are hidden, a tap anywhere (not just on the word) pauses and brings them back
+  document.addEventListener('click', e => {
+    if (!playing) return;
+    if (!document.body.classList.contains('autohide') && !document.body.classList.contains('minimal')) return;
+    if (e.target.closest('.stage-outer, .overlay, .toast-wrap')) return;    // the word area already toggles
+    if (e.target.closest('.topbar, .bottom')) return;   // a real button press (e.g. the Play that just started reading)
+    stop();
+  }, true);   // capture: check before the button reacts (Play swaps its icon mid-click)
   els.blinkToggle.addEventListener('change', () => {
     settings.blink = els.blinkToggle.checked;
     document.getElementById('blinkEveryCtl').style.display = settings.blink ? '' : 'none';
@@ -2035,6 +2095,7 @@
   els.bookViewBtn.addEventListener('click', () => {
     if (!words.length) return;
     stop();
+    sel = null; selDragging = false; document.getElementById('selBar').classList.remove('show');
     const startWord = currentWord();
     // show the sheet with a spinner first, then build (building a whole novel can take a moment)
     els.bookViewContent.innerHTML = '<div class="bv-loading"><div class="spinner"></div>Loading book…</div>';
@@ -2053,23 +2114,76 @@
     }, 50);   // gives the browser a frame to actually paint the spinner
   });
 
+  // ---- book view: press and hold to highlight a passage ----
+  // hold a word → selection starts there; keep holding and drag to extend, or lift and tap another word to set the end
+  const selEls = { bar: document.getElementById('selBar'), info: document.getElementById('selInfo') };
+  let sel = null;            // { a: anchor word, b: other end }
+  let selDragging = false;
+  function paintSel() {
+    els.bookViewContent.querySelectorAll('.bv-word.sel').forEach(s => s.classList.remove('sel', 'join'));
+    if (!sel) { selEls.bar.classList.remove('show'); return; }
+    const a = Math.min(sel.a, sel.b), b = Math.max(sel.a, sel.b);
+    for (let i = a; i <= b; i++) {
+      const s = els.bookViewContent.querySelector('[data-wi="' + i + '"]');
+      if (s) { s.classList.add('sel'); if (i < b) s.classList.add('join'); }
+    }
+    const n = b - a + 1;
+    selEls.info.textContent = n === 1 ? 'Tap or drag to extend' : n + ' words';
+    selEls.bar.classList.add('show');
+  }
+  function endSel() { sel = null; selDragging = false; paintSel(); markBookView(); }
+  function wordAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const w = el && el.closest && el.closest('.bv-word');
+    return w && els.bookViewContent.contains(w) ? parseInt(w.dataset.wi, 10) : null;
+  }
+  function extendTo(x, y) { if (!sel) return; const wi = wordAtPoint(x, y); if (wi !== null && wi !== sel.b) { sel.b = wi; paintSel(); } }
+  function saveSel(withNote) {
+    if (!sel) return;
+    const a = Math.min(sel.a, sel.b), b = Math.max(sel.a, sel.b);
+    endSel();
+    addPassageBookmark(a, b, { openNote: withNote });
+    markBookView();
+  }
+  document.getElementById('selCancel').addEventListener('click', endSel);
+  document.getElementById('selSave').addEventListener('click', () => saveSel(false));
+  document.getElementById('selNote').addEventListener('click', () => saveSel(true));
   (function () {
     let t = null, held = false, sx = 0, sy = 0;
     els.bookViewContent.addEventListener('pointerdown', e => {
-      const span = e.target.closest('.bv-word'); if (!span) return;
+      const span = e.target.closest('.bv-word'); if (!span || sel) return;
       held = false; sx = e.clientX; sy = e.clientY; clearTimeout(t);
       t = setTimeout(() => {
         held = true;
-        if (span.dataset.bm && span.classList.contains('bm')) openNote(span.dataset.bm);
-        else { const bm = addBookmarkAt(parseInt(span.dataset.wi, 10), { openNote: true }); if (bm) markBookView(); }
-      }, 550);
+        if (span.dataset.bm) { openNote(span.dataset.bm); return; }        // holding an existing bookmark opens its note
+        const wi = parseInt(span.dataset.wi, 10);
+        sel = { a: wi, b: wi }; selDragging = true; paintSel();
+        if (navigator.vibrate) navigator.vibrate(10);
+      }, 500);
     });
-    const cancel = () => clearTimeout(t);
-    els.bookViewContent.addEventListener('pointerup', cancel);
-    els.bookViewContent.addEventListener('pointercancel', cancel);
-    els.bookViewContent.addEventListener('pointermove', e => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) cancel(); });
+    const up = () => { clearTimeout(t); selDragging = false; };
+    els.bookViewContent.addEventListener('pointerup', up);
+    els.bookViewContent.addEventListener('pointercancel', up);
+    els.bookViewContent.addEventListener('pointermove', e => {
+      if (selDragging) { extendTo(e.clientX, e.clientY); return; }
+      if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) clearTimeout(t);
+    });
+    // on iPhone: once a selection has started, a drag extends it instead of scrolling
+    els.bookViewContent.addEventListener('touchmove', e => {
+      if (!selDragging) return;
+      e.preventDefault();
+      const tc = e.touches[0]; extendTo(tc.clientX, tc.clientY);
+    }, { passive: false });
+    els.bookViewContent.addEventListener('touchend', () => { selDragging = false; });
     els.bookViewContent.addEventListener('contextmenu', e => e.preventDefault());
-    els.bookViewContent.addEventListener('click', e => { if (held) { held = false; e.stopImmediatePropagation(); } }, true);
+    els.bookViewContent.addEventListener('click', e => {
+      if (held) { held = false; e.stopImmediatePropagation(); return; }
+      if (sel) {                                                        // while selecting, a tap moves the end
+        e.stopImmediatePropagation();
+        const w = e.target.closest('.bv-word');
+        if (w) { sel.b = parseInt(w.dataset.wi, 10); paintSel(); }
+      }
+    }, true);
   })();
   els.bookViewContent.addEventListener('click', (e) => {
     const span = e.target.closest('.bv-word');
@@ -2089,7 +2203,7 @@
     const $ = id => document.getElementById(id);
     const acctBtn = $('acctBtn');
     const api = { enabled, queueProgress() {}, syncSoon() {}, deleteRemote() {}, canDownload: () => false, fetchText: async () => '' };
-    let bmMissing = false;
+    let bmMissing = false, bmNoEnd = false;
     if (!enabled) return api;
 
     const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {
@@ -2124,7 +2238,8 @@
           state === 'offline' ? 'Offline — changes will sync when you reconnect.' :
           state === 'error' ? 'Last sync failed: ' + detail :
           n + ' book' + (n === 1 ? '' : 's') + ' backed up' + (lastSync ? ' · last synced ' + relTime(lastSync) : '') +
-          (bmMissing ? '. Bookmarks aren’t syncing yet: run supabase-bookmarks.sql in Supabase (one-time).' : '');
+          (bmMissing ? '. Bookmarks aren’t syncing yet: run supabase-bookmarks.sql in Supabase (one-time).' :
+           bmNoEnd ? '. Highlighted passages sync as single bookmarks until you run supabase-bookmarks.sql again (one-time).' : '');
       }
     }
     function msg(t, err) { const m = $('acctMsg'); m.textContent = t || ''; m.classList.toggle('err', !!err); }
@@ -2261,6 +2376,8 @@
         const rt = Date.parse(x.updated_at) || 0, list = arr(x.book_id), i = list.findIndex(b => b.id === x.id);
         const incoming = { id: x.id, word: x.word, snippet: x.snippet || '', chapter: x.chapter || '', note: x.note || '',
                            createdAt: Date.parse(x.created_at) || rt, updatedAt: rt, deleted: !!x.deleted };
+        if (typeof x.word_end === 'number') incoming.end = x.word_end;
+        else if (i >= 0 && typeof list[i].end === 'number' && !('word_end' in x)) incoming.end = list[i].end;   // cloud can't store it yet: keep ours
         if (i < 0) { list.push(incoming); changed.add(x.book_id); }
         else if (rt > (list[i].updatedAt || 0)) { list[i] = incoming; changed.add(x.book_id); }
       });
@@ -2270,10 +2387,17 @@
         const x = remote.get(b.id);
         if (!x || (b.updatedAt || 0) > (Date.parse(x.updated_at) || 0)) up.push({
           user_id: user.id, id: b.id, book_id: bid, word: b.word, snippet: b.snippet || '', chapter: b.chapter || '',
-          note: b.note || '', deleted: !!b.deleted,
+          note: b.note || '', deleted: !!b.deleted, word_end: typeof b.end === 'number' ? b.end : null,
           created_at: new Date(b.createdAt || Date.now()).toISOString(), updated_at: new Date(b.updatedAt || Date.now()).toISOString() });
       }));
-      if (up.length) { const e = await sb.from('bookmarks').upsert(up, { onConflict: 'user_id,id' }); if (e.error) console.warn(e.error); }
+      if (up.length) {
+        let e = await sb.from('bookmarks').upsert(up, { onConflict: 'user_id,id' });
+        if (e.error && /word_end/.test(e.error.message || '')) {         // passage column not added yet: sync the rest
+          bmNoEnd = true;
+          e = await sb.from('bookmarks').upsert(up.map(r => { const c = Object.assign({}, r); delete c.word_end; return c; }), { onConflict: 'user_id,id' });
+        } else if (!e.error) bmNoEnd = false;
+        if (e.error) console.warn(e.error);
+      }
       if (changed.size) onBookmarksChanged();
     }
 
